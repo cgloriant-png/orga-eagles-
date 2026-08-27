@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
 import com.example.ui.theme.*
+import com.example.util.SunCalculator
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -41,6 +42,10 @@ fun DayDetailSheet(
     val formattedDate = remember(dateIso) {
         val d = try { dateIn.parse(dateIso) } catch (e: Exception) { null }
         d?.let { dateOut.format(it).replaceFirstChar { c -> c.uppercase() } } ?: dateIso
+    }
+
+    val sunTimes = remember(dateIso) {
+        SunCalculator.calculateSunTimes(dateIso)
     }
 
     val status = getDayStatus(slots)
@@ -121,9 +126,38 @@ fun DayDetailSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Solar info pill for Plouharnel (56)
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = HighDensitySurface,
+                border = BorderStroke(1.dp, BorderOutline.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("📍", fontSize = 11.sp)
+                        Text("Plouharnel (56) :", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
+                    }
+                    Text(
+                        "🌅 Lever ${sunTimes.sunriseStr}  •  🌇 Coucher ${sunTimes.sunsetStr}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryBlue
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
             Divider(color = BorderOutline.copy(alpha = 0.5f))
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             if (slots.isEmpty()) {
                 Box(

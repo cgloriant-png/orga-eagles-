@@ -1,6 +1,7 @@
 package com.example.data.db
 
 import com.example.data.model.*
+import com.example.util.SunCalculator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.text.SimpleDateFormat
@@ -190,13 +191,22 @@ class PlanningRepository(private val planningDao: PlanningDao) {
         dateIso: String,
         config: StandardDayConfig = StandardDayConfig()
     ): List<Long> {
-        val sunriseStart = String.format(Locale.US, "%02d:%02d", config.sunriseHour, config.sunriseMinute)
-        val sunrisePlus2 = String.format(Locale.US, "%02d:%02d", (config.sunriseHour + 2).coerceAtMost(23), config.sunriseMinute)
-        val sunrisePlus4 = String.format(Locale.US, "%02d:%02d", (config.sunriseHour + 4).coerceAtMost(23), config.sunriseMinute)
+        // If config sunrise/sunset are at default values, calculate exact solar times for Plouharnel (56)
+        val sunTimes = SunCalculator.calculateSunTimes(dateIso)
+        val sunriseH = if (config.sunriseHour == 6 && config.sunriseMinute == 30) sunTimes.sunriseHour else config.sunriseHour
+        val sunriseM = if (config.sunriseHour == 6 && config.sunriseMinute == 30) sunTimes.sunriseMinute else config.sunriseMinute
+        val sunsetH = if (config.sunsetHour == 21 && config.sunsetMinute == 0) sunTimes.sunsetHour else config.sunsetHour
+        val sunsetM = if (config.sunsetHour == 21 && config.sunsetMinute == 0) sunTimes.sunsetMinute else config.sunsetMinute
 
-        val sunsetMinus4 = String.format(Locale.US, "%02d:%02d", (config.sunsetHour - 4).coerceAtLeast(0), config.sunsetMinute)
-        val sunsetMinus2 = String.format(Locale.US, "%02d:%02d", (config.sunsetHour - 2).coerceAtLeast(0), config.sunsetMinute)
-        val sunsetEnd = String.format(Locale.US, "%02d:%02d", config.sunsetHour.coerceAtMost(23), config.sunsetMinute)
+        val sunriseStart = String.format(Locale.US, "%02d:%02d", sunriseH, sunriseM)
+        val sunrisePlus2 = String.format(Locale.US, "%02d:%02d", (sunriseH + 2).coerceAtMost(23), sunriseM)
+        val sunrisePlus4 = String.format(Locale.US, "%02d:%02d", (sunriseH + 4).coerceAtMost(23), sunriseM)
+
+        val sunsetMinus4 = String.format(Locale.US, "%02d:%02d", (sunsetH - 4).coerceAtLeast(0), sunsetM)
+        val sunsetMinus2 = String.format(Locale.US, "%02d:%02d", (sunsetH - 2).coerceAtLeast(0), sunsetM)
+        val sunsetEnd = String.format(Locale.US, "%02d:%02d", sunsetH.coerceAtMost(23), sunsetM)
+
+        val location = if (config.location == "Terrain de décollage") "Plouharnel (56)" else config.location
 
         val slotsToCreate = listOf(
             LessonSlotEntity(

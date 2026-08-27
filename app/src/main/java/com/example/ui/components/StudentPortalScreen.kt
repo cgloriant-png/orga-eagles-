@@ -41,7 +41,7 @@ fun StudentPortalScreen(
     slots: List<SlotWithBookings>,
     savedProfile: PlanningViewModel.StudentProfile,
     onSaveProfile: (firstName: String, lastName: String, phone: String, level: String) -> Unit,
-    onRegisterSelf: (slotId: Long, firstName: String, lastName: String, phone: String, email: String, level: String, onComplete: (StudentEntity, LessonSlotEntity, String) -> Unit) -> Unit,
+    onRegisterSelf: (slotId: Long, firstName: String, lastName: String, phone: String, email: String, level: String) -> Unit,
     onUnenroll: (slotId: Long, studentId: Long) -> Unit,
     allStudents: List<StudentEntity>,
     onVerifyPin: (String) -> Boolean,
@@ -106,26 +106,6 @@ fun StudentPortalScreen(
         }
         val typeMatches = if (selectedTypeFilter != null) item.slot.lessonType.equals(selectedTypeFilter, ignoreCase = true) else true
         dateMatches && typeMatches && !item.slot.isCancelled
-    }
-
-    fun openWhatsAppShare(text: String) {
-        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-            putExtra(Intent.EXTRA_TEXT, text)
-            type = "text/plain"
-            `package` = "com.whatsapp"
-        }
-        try {
-            context.startActivity(sendIntent)
-        } catch (_: Exception) {
-            val chooser = Intent.createChooser(
-                Intent(Intent.ACTION_SEND).apply {
-                    putExtra(Intent.EXTRA_TEXT, text)
-                    type = "text/plain"
-                },
-                "Envoyer ma confirmation d'inscription au moniteur"
-            )
-            try { context.startActivity(chooser) } catch (_: Exception) {}
-        }
     }
 
     Scaffold(
@@ -548,9 +528,7 @@ fun StudentPortalScreen(
                                                     savedProfile.phone,
                                                     "",
                                                     savedProfile.level
-                                                ) { _, _, shareText ->
-                                                    openWhatsAppShare(shareText)
-                                                }
+                                                )
                                             }
                                         }
                                     )
@@ -585,9 +563,7 @@ fun StudentPortalScreen(
                         savedProfile.phone,
                         "",
                         savedProfile.level
-                    ) { _, _, shareText ->
-                        openWhatsAppShare(shareText)
-                    }
+                    )
                 }
             }
         )
@@ -756,9 +732,7 @@ fun StudentPortalScreen(
                                 phone,
                                 "",
                                 level
-                            ) { _, _, shareText ->
-                                openWhatsAppShare(shareText)
-                            }
+                            )
                             slotToRegister = null
                         }
                     },
@@ -915,6 +889,10 @@ fun StudentDayDetailSheet(
     onUnenroll: (Long, Long) -> Unit,
     onRegisterSlot: (SlotWithBookings) -> Unit
 ) {
+    val sunTimes = remember(dateIso) {
+        com.example.util.SunCalculator.calculateSunTimes(dateIso)
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = HighDensitySurface,
@@ -925,7 +903,7 @@ fun StudentDayDetailSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Header
             Row(
@@ -952,6 +930,33 @@ fun StudentDayDetailSheet(
 
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, contentDescription = "Fermer")
+                }
+            }
+
+            // Plouharnel Solar Banner
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = HighDensityBg,
+                border = BorderStroke(1.dp, BorderOutline.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("📍", fontSize = 11.sp)
+                        Text("Plouharnel (56) :", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
+                    }
+                    Text(
+                        "🌅 Lever ${sunTimes.sunriseStr}  •  🌇 Coucher ${sunTimes.sunsetStr}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PrimaryBlue
+                    )
                 }
             }
 

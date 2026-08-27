@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.StandardDayConfig
 import com.example.ui.theme.*
+import com.example.util.SunCalculator
 import java.util.Locale
 
 @Composable
@@ -31,13 +32,27 @@ fun StandardDayDialog(
 ) {
     var dateIso by remember { mutableStateOf(initialDateIso) }
 
-    // Sunrise / Sunset hours
-    var sunriseHour by remember { mutableIntStateOf(initialConfig.sunriseHour) }
-    var sunriseMinute by remember { mutableIntStateOf(initialConfig.sunriseMinute) }
-    var sunsetHour by remember { mutableIntStateOf(initialConfig.sunsetHour) }
-    var sunsetMinute by remember { mutableIntStateOf(initialConfig.sunsetMinute) }
+    // Compute astronomical sunrise / sunset for the initial date at Plouharnel (56)
+    val autoSunTimes = remember(dateIso) {
+        SunCalculator.calculateSunTimes(dateIso)
+    }
 
-    var location by remember { mutableStateOf(initialConfig.location) }
+    // Sunrise / Sunset hours (initialized with astronomical calculation for Plouharnel)
+    var sunriseHour by remember { mutableIntStateOf(autoSunTimes.sunriseHour) }
+    var sunriseMinute by remember { mutableIntStateOf(autoSunTimes.sunriseMinute) }
+    var sunsetHour by remember { mutableIntStateOf(autoSunTimes.sunsetHour) }
+    var sunsetMinute by remember { mutableIntStateOf(autoSunTimes.sunsetMinute) }
+
+    // Whenever date changes, automatically update sunrise / sunset according to Plouharnel ephemeris
+    LaunchedEffect(dateIso) {
+        val calculated = SunCalculator.calculateSunTimes(dateIso)
+        sunriseHour = calculated.sunriseHour
+        sunriseMinute = calculated.sunriseMinute
+        sunsetHour = calculated.sunsetHour
+        sunsetMinute = calculated.sunsetMinute
+    }
+
+    var location by remember { mutableStateOf(if (initialConfig.location == "Terrain de décollage") "Plouharnel (56)" else initialConfig.location) }
 
     // Customizable capacities (User can modify Vol & Gonflage slots)
     var morningVolCap by remember { mutableIntStateOf(initialConfig.morningVolCapacity) }
@@ -66,7 +81,7 @@ fun StandardDayDialog(
                 Text("⚡", fontSize = 22.sp)
                 Column {
                     Text("Créer une Journée Type", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("Génération automatique & Paramètres des 4 créneaux", fontSize = 11.sp, color = SecondaryText)
+                    Text("Calcul éphémérides auto • Plouharnel (56)", fontSize = 11.sp, color = PrimaryBlue, fontWeight = FontWeight.SemiBold)
                 }
             }
         },
@@ -81,42 +96,72 @@ fun StandardDayDialog(
                 OutlinedTextField(
                     value = dateIso,
                     onValueChange = { dateIso = it },
-                    label = { Text("Date (AAAA-MM-JJ)") },
+                    label = { Text("Date de la séance (AAAA-MM-JJ)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 )
 
-                // Sun presets chips
-                Text("Saison & Heures du Soleil :", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Ephemeris Auto Calculation Banner (Plouharnel 56)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = PrimaryBlueContainer.copy(alpha = 0.6f),
+                    border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    AssistChip(
-                        onClick = {
-                            sunriseHour = 6; sunriseMinute = 30
-                            sunsetHour = 21; sunsetMinute = 0
-                        },
-                        label = { Text("☀️ Été (6h30-21h)", fontSize = 10.sp) }
-                    )
-                    AssistChip(
-                        onClick = {
-                            sunriseHour = 7; sunriseMinute = 30
-                            sunsetHour = 19; sunsetMinute = 30
-                        },
-                        label = { Text("🍂 Mi-saison (7h30-19h30)", fontSize = 10.sp) }
-                    )
-                    AssistChip(
-                        onClick = {
-                            sunriseHour = 8; sunriseMinute = 30
-                            sunsetHour = 17; sunsetMinute = 30
-                        },
-                        label = { Text("❄️ Hiver (8h30-17h30)", fontSize = 10.sp) }
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("📍", fontSize = 14.sp)
+                                Text("Éphémérides Plouharnel (56)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = PrimaryBlue)
+                            }
+                            TextButton(
+                                onClick = {
+                                    val calculated = SunCalculator.calculateSunTimes(dateIso)
+                                    sunriseHour = calculated.sunriseHour
+                                    sunriseMinute = calculated.sunriseMinute
+                                    sunsetHour = calculated.sunsetHour
+                                    sunsetMinute = calculated.sunsetMinute
+                                },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                modifier = Modifier.height(24.dp)
+                            ) {
+                                Text("🔄 Recalculer", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "🌅 Lever : ${autoSunTimes.sunriseStr}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = HighDensityHeaderTitle
+                            )
+                            Text("•", color = SecondaryText)
+                            Text(
+                                "🌇 Coucher : ${autoSunTimes.sunsetStr}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = HighDensityHeaderTitle
+                            )
+                        }
+                    }
                 }
 
-                // Adjust Sunrise / Sunset
+                // Adjust Sunrise / Sunset fields
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -156,7 +201,8 @@ fun StandardDayDialog(
                 OutlinedTextField(
                     value = location,
                     onValueChange = { location = it },
-                    label = { Text("Lieu") },
+                    label = { Text("Lieu de rendez-vous") },
+                    placeholder = { Text("Plouharnel (56) / Pente école") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
@@ -181,7 +227,7 @@ fun StandardDayDialog(
                 ) {
                     CapacityStepperRow(
                         emoji = "✈️",
-                        title = "1. Matin Vol",
+                        title = "1. Matin Vol (Lever)",
                         hours = "$sunriseStartStr - $sunrisePlus2Str",
                         value = morningVolCap,
                         onValueChange = { morningVolCap = it.coerceIn(1, 20) }
@@ -205,7 +251,7 @@ fun StandardDayDialog(
 
                     CapacityStepperRow(
                         emoji = "✈️",
-                        title = "4. Soir Vol",
+                        title = "4. Soir Vol (Coucher)",
                         hours = "$sunsetMinus2Str - $sunsetEndStr",
                         value = eveningVolCap,
                         onValueChange = { eveningVolCap = it.coerceIn(1, 20) }
@@ -244,7 +290,7 @@ fun StandardDayDialog(
                         morningGonflageCapacity = morningGonflageCap,
                         eveningGonflageCapacity = eveningGonflageCap,
                         eveningVolCapacity = eveningVolCap,
-                        location = location.ifBlank { "Terrain de décollage" }
+                        location = location.ifBlank { "Plouharnel (56)" }
                     )
                     onConfirm(dateIso, config, saveAsDefault)
                 },

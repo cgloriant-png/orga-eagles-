@@ -277,13 +277,13 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
         phone: String,
         email: String = "",
         level: String = "Gonflage",
-        onComplete: (student: StudentEntity, slot: LessonSlotEntity, shareText: String) -> Unit
+        onComplete: ((student: StudentEntity, slot: LessonSlotEntity) -> Unit)? = null
     ) {
         viewModelScope.launch {
             // Save profile locally for future 1-click use
             saveStudentProfile(firstName, lastName, phone, level)
 
-            val (student, _) = repository.registerStudentSelf(
+            val (student, isSuccess) = repository.registerStudentSelf(
                 slotId = slotId,
                 firstName = firstName,
                 lastName = lastName,
@@ -296,9 +296,12 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
             val slot = slotsWithBookings.value.find { it.slot.id == slotId }?.slot
                 ?: LessonSlotEntity(id = slotId, dateIso = "", startTime = "", endTime = "", title = "Créneau", lessonType = "GONFLAGE")
 
-            val shareText = repository.generateStudentRegistrationWhatsAppText(student, slot, isWaitingList = false)
-            _feedbackMessage.emit("Inscription enregistrée ! Ouverture de WhatsApp...")
-            onComplete(student, slot, shareText)
+            if (isSuccess) {
+                _feedbackMessage.emit("✅ Inscription validée ! 1 place réservée pour ${student.fullName}.")
+            } else {
+                _feedbackMessage.emit("ℹ️ Vous êtes déjà inscrit à ce créneau.")
+            }
+            onComplete?.invoke(student, slot)
         }
     }
 

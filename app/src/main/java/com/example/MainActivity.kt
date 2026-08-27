@@ -125,8 +125,8 @@ class MainActivity : ComponentActivity() {
                         onSaveProfile = { first, last, phone, level ->
                             viewModel.saveStudentProfile(first, last, phone, level)
                         },
-                        onRegisterSelf = { slotId, firstName, lastName, phone, email, level, onComplete ->
-                            viewModel.registerStudentSelf(slotId, firstName, lastName, phone, email, level, onComplete)
+                        onRegisterSelf = { slotId, firstName, lastName, phone, email, level ->
+                            viewModel.registerStudentSelf(slotId, firstName, lastName, phone, email, level)
                         },
                         onUnenroll = { slotId, studentId ->
                             viewModel.unenrollStudent(slotId, studentId)
