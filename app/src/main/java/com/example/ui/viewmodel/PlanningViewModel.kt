@@ -27,10 +27,10 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     val slotsWithBookings: StateFlow<List<SlotWithBookings>>
     val studentsWithStats: StateFlow<List<StudentWithStats>>
 
-    // App Mode: false = Mode Moniteur (Instructeur), true = Version Élève
+    // App Mode: true = Version Élève (par défaut pour les nouveaux utilisateurs), false = Mode Moniteur
     private val prefs = application.getSharedPreferences("paramoteur_planning_prefs", android.content.Context.MODE_PRIVATE)
 
-    private val _isStudentMode = MutableStateFlow(prefs.getBoolean("is_student_mode", false))
+    private val _isStudentMode = MutableStateFlow(prefs.getBoolean("is_student_mode", true))
     val isStudentMode: StateFlow<Boolean> = _isStudentMode.asStateFlow()
 
     // Instructor PIN (defaults to "1234")
