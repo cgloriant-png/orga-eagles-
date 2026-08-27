@@ -63,84 +63,80 @@ class PlanningRepository(private val planningDao: PlanningDao) {
     }
 
     suspend fun initializeSampleDataIfNeeded() {
-        val count = planningDao.getStudentsCount()
-        if (count == 0) {
+        val studentCount = planningDao.getStudentsCount()
+        val slotCount = planningDao.getSlotsCount()
+        if (studentCount == 0 && slotCount == 0) {
             val sampleStudents = listOf(
-                StudentEntity(id = 1, firstName = "Julien", lastName = "Mercier", phone = "06 12 34 56 78", level = "Gonflage", notes = "Très assidu"),
-                StudentEntity(id = 2, firstName = "Sophie", lastName = "Bernard", phone = "06 23 45 67 89", level = "Vol", notes = "Prête pour autonomie"),
-                StudentEntity(id = 3, firstName = "Thomas", lastName = "Laurent", phone = "06 34 56 78 90", level = "Perf", notes = "Travail en thermique"),
-                StudentEntity(id = 4, firstName = "Lucas", lastName = "Dubois", phone = "06 45 67 89 01", level = "Vol"),
-                StudentEntity(id = 5, firstName = "Émilie", lastName = "Moreau", phone = "06 56 78 90 12", level = "Gonflage"),
-                StudentEntity(id = 6, firstName = "Maxime", lastName = "Petit", phone = "06 67 89 01 23", level = "Perf")
+                StudentEntity(firstName = "Julien", lastName = "Mercier", phone = "06 12 34 56 78", level = "Gonflage", notes = "Très assidu"),
+                StudentEntity(firstName = "Sophie", lastName = "Bernard", phone = "06 23 45 67 89", level = "Vol", notes = "Prête pour autonomie"),
+                StudentEntity(firstName = "Thomas", lastName = "Laurent", phone = "06 34 56 78 90", level = "Perf", notes = "Travail en thermique"),
+                StudentEntity(firstName = "Lucas", lastName = "Dubois", phone = "06 45 67 89 01", level = "Vol"),
+                StudentEntity(firstName = "Émilie", lastName = "Moreau", phone = "06 56 78 90 12", level = "Gonflage"),
+                StudentEntity(firstName = "Maxime", lastName = "Petit", phone = "06 67 89 01 23", level = "Perf")
             )
-            planningDao.insertStudents(sampleStudents)
+            val studentIds = mutableListOf<Long>()
+            for (student in sampleStudents) {
+                studentIds.add(planningDao.insertStudent(student))
+            }
 
             // Seed a few calendar slots
             val cal = Calendar.getInstance()
             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE)
 
-            val slots = mutableListOf<LessonSlotEntity>()
-            val bookings = mutableListOf<BookingEntity>()
-
-            // Aujourd'hui
             val d0 = dateFormat.format(cal.time)
-            slots.add(
-                LessonSlotEntity(
-                    id = 1,
-                    dateIso = d0,
-                    startTime = "08:00",
-                    endTime = "11:30",
-                    title = "Créneau Gonflage Matin",
-                    lessonType = "GONFLAGE",
-                    location = "Pente École",
-                    maxCapacity = 4,
-                    notes = "Vent régulier prévu"
-                )
-            )
-
-            // Demain (Complet)
             cal.add(Calendar.DAY_OF_YEAR, 1)
             val d1 = dateFormat.format(cal.time)
-            slots.add(
-                LessonSlotEntity(
-                    id = 2,
-                    dateIso = d1,
-                    startTime = "07:00",
-                    endTime = "10:00",
-                    title = "Créneau Vol du Matin",
-                    lessonType = "VOL",
-                    location = "Décollage Sud",
-                    maxCapacity = 2,
-                    notes = "Conditions calmes idéales"
-                )
-            )
-
-            // Après-demain (Disponible)
             cal.add(Calendar.DAY_OF_YEAR, 1)
             val d2 = dateFormat.format(cal.time)
-            slots.add(
+
+            // Slot 1 : Gonflage matin (1h à 3h après lever, ex 07:30 - 09:30)
+            val slotId1 = planningDao.insertSlot(
                 LessonSlotEntity(
-                    id = 3,
-                    dateIso = d2,
-                    startTime = "09:00",
-                    endTime = "12:00",
-                    title = "Créneau Perf & Pilotage",
-                    lessonType = "PERF",
-                    location = "Terrain Principal",
-                    maxCapacity = 3,
-                    notes = "Travail sur les trajectoires"
+                    dateIso = d0,
+                    startTime = "07:30",
+                    endTime = "09:30",
+                    title = "Matin Gonflage (1h à 3h après lever)",
+                    lessonType = "GONFLAGE",
+                    location = "Pente École - Plouharnel (56)",
+                    maxCapacity = 4,
+                    notes = "Brise de mer matinale idéale"
                 )
             )
 
-            planningDao.insertSlots(slots)
+            // Slot 2 : Vol matin (Lever du soleil, 06:30 - 08:30)
+            val slotId2 = planningDao.insertSlot(
+                LessonSlotEntity(
+                    dateIso = d1,
+                    startTime = "06:30",
+                    endTime = "08:30",
+                    title = "Matin Vol (Lever -> +2h)",
+                    lessonType = "VOL",
+                    location = "Décollage Sud - Plouharnel (56)",
+                    maxCapacity = 2,
+                    notes = "Air calme et laminaire"
+                )
+            )
 
-            // Bookings: Slot 1 has 2/4 (Disponible - VERT), Slot 2 has 2/2 (Complet - ROUGE)
-            bookings.add(BookingEntity(slotId = 1, studentId = 1, isWaitingList = false))
-            bookings.add(BookingEntity(slotId = 1, studentId = 5, isWaitingList = false))
-            bookings.add(BookingEntity(slotId = 2, studentId = 2, isWaitingList = false))
-            bookings.add(BookingEntity(slotId = 2, studentId = 4, isWaitingList = false))
+            // Slot 3 : Soir Gonflage (-3h à -1h avant coucher, 18:00 - 20:00)
+            val slotId3 = planningDao.insertSlot(
+                LessonSlotEntity(
+                    dateIso = d2,
+                    startTime = "18:00",
+                    endTime = "20:00",
+                    title = "Soir Gonflage (-3h à -1h avant coucher)",
+                    lessonType = "GONFLAGE",
+                    location = "Pente École - Plouharnel (56)",
+                    maxCapacity = 4,
+                    notes = "Travail sur les trajectoires et face voile"
+                )
+            )
 
-            planningDao.insertBookings(bookings)
+            if (studentIds.size >= 4) {
+                planningDao.insertBooking(BookingEntity(slotId = slotId1, studentId = studentIds[0], isWaitingList = false))
+                planningDao.insertBooking(BookingEntity(slotId = slotId1, studentId = studentIds[4], isWaitingList = false))
+                planningDao.insertBooking(BookingEntity(slotId = slotId2, studentId = studentIds[1], isWaitingList = false))
+                planningDao.insertBooking(BookingEntity(slotId = slotId2, studentId = studentIds[3], isWaitingList = false))
+            }
         }
     }
 
@@ -199,11 +195,13 @@ class PlanningRepository(private val planningDao: PlanningDao) {
         val sunsetM = if (config.sunsetHour == 21 && config.sunsetMinute == 0) sunTimes.sunsetMinute else config.sunsetMinute
 
         val sunriseStart = String.format(Locale.US, "%02d:%02d", sunriseH, sunriseM)
+        val sunrisePlus1 = String.format(Locale.US, "%02d:%02d", (sunriseH + 1).coerceAtMost(23), sunriseM)
         val sunrisePlus2 = String.format(Locale.US, "%02d:%02d", (sunriseH + 2).coerceAtMost(23), sunriseM)
-        val sunrisePlus4 = String.format(Locale.US, "%02d:%02d", (sunriseH + 4).coerceAtMost(23), sunriseM)
+        val sunrisePlus3 = String.format(Locale.US, "%02d:%02d", (sunriseH + 3).coerceAtMost(23), sunriseM)
 
-        val sunsetMinus4 = String.format(Locale.US, "%02d:%02d", (sunsetH - 4).coerceAtLeast(0), sunsetM)
+        val sunsetMinus3 = String.format(Locale.US, "%02d:%02d", (sunsetH - 3).coerceAtLeast(0), sunsetM)
         val sunsetMinus2 = String.format(Locale.US, "%02d:%02d", (sunsetH - 2).coerceAtLeast(0), sunsetM)
+        val sunsetMinus1 = String.format(Locale.US, "%02d:%02d", (sunsetH - 1).coerceAtLeast(0), sunsetM)
         val sunsetEnd = String.format(Locale.US, "%02d:%02d", sunsetH.coerceAtMost(23), sunsetM)
 
         val location = if (config.location == "Terrain de décollage") "Plouharnel (56)" else config.location
@@ -213,31 +211,31 @@ class PlanningRepository(private val planningDao: PlanningDao) {
                 dateIso = dateIso,
                 startTime = sunriseStart,
                 endTime = sunrisePlus2,
-                title = "Matin Vol (Lever du soleil)",
+                title = "Matin Vol (Lever -> +2h)",
                 lessonType = "VOL",
-                location = config.location,
+                location = location,
                 maxCapacity = config.morningVolCapacity,
-                notes = "Aérologie calme du lever du soleil (+2h)"
+                notes = "Aérologie calme du lever du soleil (Aube jusqu'à 2h après le lever)"
             ),
             LessonSlotEntity(
                 dateIso = dateIso,
-                startTime = sunrisePlus2,
-                endTime = sunrisePlus4,
-                title = "Matin Gonflage",
+                startTime = sunrisePlus1,
+                endTime = sunrisePlus3,
+                title = "Matin Gonflage (+1h à +3h)",
                 lessonType = "GONFLAGE",
-                location = config.location,
+                location = location,
                 maxCapacity = config.morningGonflageCapacity,
-                notes = "Brise matinale jusqu'à +4h après lever"
+                notes = "Brise matinale de 1h à 3h après le lever"
             ),
             LessonSlotEntity(
                 dateIso = dateIso,
-                startTime = sunsetMinus4,
-                endTime = sunsetMinus2,
-                title = "Soir Gonflage",
+                startTime = sunsetMinus3,
+                endTime = sunsetMinus1,
+                title = "Soir Gonflage (-3h à -1h)",
                 lessonType = "GONFLAGE",
-                location = config.location,
+                location = location,
                 maxCapacity = config.eveningGonflageCapacity,
-                notes = "Gonflage fin d'après-midi (-4h à -2h avant coucher)"
+                notes = "Gonflage fin d'après-midi de 3h à 1h avant le coucher"
             ),
             LessonSlotEntity(
                 dateIso = dateIso,
@@ -245,9 +243,9 @@ class PlanningRepository(private val planningDao: PlanningDao) {
                 endTime = sunsetEnd,
                 title = "Soir Vol (Coucher du soleil)",
                 lessonType = "VOL",
-                location = config.location,
+                location = location,
                 maxCapacity = config.eveningVolCapacity,
-                notes = "Restitution & vol calme (-2h jusqu'au coucher)"
+                notes = "Restitution & vol calme de 2h avant jusqu'au coucher"
             )
         )
 

@@ -42,19 +42,19 @@ object SunCalculator {
             get() = String.format(Locale.US, "%02d:%02d", (sunriseHour + 2).coerceAtMost(23), sunriseMinute)
 
         val morningGonflageStart: String
-            get() = morningVolEnd
+            get() = String.format(Locale.US, "%02d:%02d", (sunriseHour + 1).coerceAtMost(23), sunriseMinute)
 
         val morningGonflageEnd: String
-            get() = String.format(Locale.US, "%02d:%02d", (sunriseHour + 4).coerceAtMost(23), sunriseMinute)
+            get() = String.format(Locale.US, "%02d:%02d", (sunriseHour + 3).coerceAtMost(23), sunriseMinute)
 
         val eveningGonflageStart: String
-            get() = String.format(Locale.US, "%02d:%02d", (sunsetHour - 4).coerceAtLeast(0), sunsetMinute)
+            get() = String.format(Locale.US, "%02d:%02d", (sunsetHour - 3).coerceAtLeast(0), sunsetMinute)
 
         val eveningGonflageEnd: String
-            get() = String.format(Locale.US, "%02d:%02d", (sunsetHour - 2).coerceAtLeast(0), sunsetMinute)
+            get() = String.format(Locale.US, "%02d:%02d", (sunsetHour - 1).coerceAtLeast(0), sunsetMinute)
 
         val eveningVolStart: String
-            get() = eveningGonflageEnd
+            get() = String.format(Locale.US, "%02d:%02d", (sunsetHour - 2).coerceAtLeast(0), sunsetMinute)
 
         val eveningVolEnd: String
             get() = sunsetStr

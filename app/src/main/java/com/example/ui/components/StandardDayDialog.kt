@@ -64,11 +64,13 @@ fun StandardDayDialog(
 
     // Calculated slot preview strings
     val sunriseStartStr = String.format(Locale.US, "%02d:%02d", sunriseHour, sunriseMinute)
+    val sunrisePlus1Str = String.format(Locale.US, "%02d:%02d", (sunriseHour + 1).coerceAtMost(23), sunriseMinute)
     val sunrisePlus2Str = String.format(Locale.US, "%02d:%02d", (sunriseHour + 2).coerceAtMost(23), sunriseMinute)
-    val sunrisePlus4Str = String.format(Locale.US, "%02d:%02d", (sunriseHour + 4).coerceAtMost(23), sunriseMinute)
+    val sunrisePlus3Str = String.format(Locale.US, "%02d:%02d", (sunriseHour + 3).coerceAtMost(23), sunriseMinute)
 
-    val sunsetMinus4Str = String.format(Locale.US, "%02d:%02d", (sunsetHour - 4).coerceAtLeast(0), sunsetMinute)
+    val sunsetMinus3Str = String.format(Locale.US, "%02d:%02d", (sunsetHour - 3).coerceAtLeast(0), sunsetMinute)
     val sunsetMinus2Str = String.format(Locale.US, "%02d:%02d", (sunsetHour - 2).coerceAtLeast(0), sunsetMinute)
+    val sunsetMinus1Str = String.format(Locale.US, "%02d:%02d", (sunsetHour - 1).coerceAtLeast(0), sunsetMinute)
     val sunsetEndStr = String.format(Locale.US, "%02d:%02d", sunsetHour.coerceAtMost(23), sunsetMinute)
 
     AlertDialog(
@@ -227,7 +229,7 @@ fun StandardDayDialog(
                 ) {
                     CapacityStepperRow(
                         emoji = "✈️",
-                        title = "1. Matin Vol (Lever)",
+                        title = "1. Matin Vol (Lever -> +2h)",
                         hours = "$sunriseStartStr - $sunrisePlus2Str",
                         value = morningVolCap,
                         onValueChange = { morningVolCap = it.coerceIn(1, 20) }
@@ -235,23 +237,23 @@ fun StandardDayDialog(
 
                     CapacityStepperRow(
                         emoji = "🪂",
-                        title = "2. Matin Gonflage",
-                        hours = "$sunrisePlus2Str - $sunrisePlus4Str",
+                        title = "2. Matin Gonflage (+1h à +3h)",
+                        hours = "$sunrisePlus1Str - $sunrisePlus3Str",
                         value = morningGonflageCap,
                         onValueChange = { morningGonflageCap = it.coerceIn(1, 20) }
                     )
 
                     CapacityStepperRow(
                         emoji = "🪂",
-                        title = "3. Soir Gonflage",
-                        hours = "$sunsetMinus4Str - $sunsetMinus2Str",
+                        title = "3. Soir Gonflage (-3h à -1h)",
+                        hours = "$sunsetMinus3Str - $sunsetMinus1Str",
                         value = eveningGonflageCap,
                         onValueChange = { eveningGonflageCap = it.coerceIn(1, 20) }
                     )
 
                     CapacityStepperRow(
                         emoji = "✈️",
-                        title = "4. Soir Vol (Coucher)",
+                        title = "4. Soir Vol (-2h -> Coucher)",
                         hours = "$sunsetMinus2Str - $sunsetEndStr",
                         value = eveningVolCap,
                         onValueChange = { eveningVolCap = it.coerceIn(1, 20) }

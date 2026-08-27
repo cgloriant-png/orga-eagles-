@@ -44,6 +44,9 @@ interface PlanningDao {
     @Query("SELECT * FROM lesson_slots WHERE dateIso = :dateIso ORDER BY startTime ASC")
     fun getSlotsByDate(dateIso: String): Flow<List<LessonSlotEntity>>
 
+    @Query("SELECT COUNT(*) FROM lesson_slots")
+    suspend fun getSlotsCount(): Int
+
     @Query("SELECT * FROM lesson_slots WHERE id = :slotId LIMIT 1")
     suspend fun getSlotById(slotId: Long): LessonSlotEntity?
 
