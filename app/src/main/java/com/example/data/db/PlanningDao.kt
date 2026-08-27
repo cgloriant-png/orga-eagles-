@@ -37,6 +37,9 @@ interface PlanningDao {
     @Delete
     suspend fun deleteStudent(student: StudentEntity)
 
+    @Query("DELETE FROM students WHERE id = :studentId")
+    suspend fun deleteStudentById(studentId: Long)
+
     // --- Slots ---
     @Query("SELECT * FROM lesson_slots ORDER BY dateIso ASC, startTime ASC")
     fun getAllSlots(): Flow<List<LessonSlotEntity>>
@@ -66,8 +69,14 @@ interface PlanningDao {
     suspend fun deleteSlotById(slotId: Long)
 
     // --- Bookings ---
+    @Query("SELECT * FROM bookings WHERE id = :id LIMIT 1")
+    suspend fun getBookingById(id: Long): BookingEntity?
+
     @Query("SELECT * FROM bookings WHERE slotId = :slotId")
     fun getBookingsForSlot(slotId: Long): Flow<List<BookingEntity>>
+
+    @Query("SELECT * FROM bookings WHERE slotId = :slotId")
+    suspend fun getBookingsForSlotSync(slotId: Long): List<BookingEntity>
 
     @Query("SELECT * FROM bookings WHERE studentId = :studentId")
     fun getBookingsForStudent(studentId: Long): Flow<List<BookingEntity>>
@@ -86,6 +95,9 @@ interface PlanningDao {
 
     @Delete
     suspend fun deleteBooking(booking: BookingEntity)
+
+    @Query("DELETE FROM bookings WHERE id = :bookingId")
+    suspend fun deleteBookingById(bookingId: Long)
 
     @Query("DELETE FROM bookings WHERE slotId = :slotId AND studentId = :studentId")
     suspend fun deleteBookingBySlotAndStudent(slotId: Long, studentId: Long)

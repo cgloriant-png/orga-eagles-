@@ -3,6 +3,8 @@ package com.example.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.cloud.CloudSyncManager
+import com.example.data.cloud.SyncStatus
 import com.example.data.db.AppDatabase
 import com.example.data.db.PlanningRepository
 import com.example.data.model.*
@@ -14,6 +16,11 @@ import java.util.*
 class PlanningViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: PlanningRepository
+    val cloudSyncManager: CloudSyncManager
+
+    // Cloud Sync status
+    val syncStatus: StateFlow<SyncStatus>
+    val syncStatusMessage: StateFlow<String>
 
     // Base data flows
     val allStudents: StateFlow<List<StudentEntity>>
@@ -89,7 +96,11 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
     init {
         val db = AppDatabase.getDatabase(application)
-        repository = PlanningRepository(db.planningDao())
+        cloudSyncManager = CloudSyncManager(application, db.planningDao(), viewModelScope)
+        repository = PlanningRepository(db.planningDao(), cloudSyncManager)
+
+        syncStatus = cloudSyncManager.syncStatus
+        syncStatusMessage = cloudSyncManager.statusMessage
 
         allStudents = repository.allStudents
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

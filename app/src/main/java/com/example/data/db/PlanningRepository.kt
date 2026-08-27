@@ -1,5 +1,6 @@
 package com.example.data.db
 
+import com.example.data.cloud.CloudSyncManager
 import com.example.data.model.*
 import com.example.util.SunCalculator
 import kotlinx.coroutines.flow.Flow
@@ -7,7 +8,10 @@ import kotlinx.coroutines.flow.combine
 import java.text.SimpleDateFormat
 import java.util.*
 
-class PlanningRepository(private val planningDao: PlanningDao) {
+class PlanningRepository(
+    private val planningDao: PlanningDao,
+    var cloudSyncManager: CloudSyncManager? = null
+) {
 
     val allStudents: Flow<List<StudentEntity>> = planningDao.getAllStudents()
     val allSlots: Flow<List<LessonSlotEntity>> = planningDao.getAllSlots()
@@ -141,29 +145,51 @@ class PlanningRepository(private val planningDao: PlanningDao) {
     }
 
     // --- Slot Actions ---
-    suspend fun createSlot(slot: LessonSlotEntity): Long = planningDao.insertSlot(slot)
+    suspend fun createSlot(slot: LessonSlotEntity): Long {
+        val id = planningDao.insertSlot(slot)
+        val created = slot.copy(id = id)
+        cloudSyncManager?.pushSlot(created)
+        return id
+    }
 
-    suspend fun updateSlot(slot: LessonSlotEntity) = planningDao.updateSlot(slot)
+    suspend fun updateSlot(slot: LessonSlotEntity) {
+        planningDao.updateSlot(slot)
+        cloudSyncManager?.pushSlot(slot)
+    }
 
-    suspend fun deleteSlot(slotId: Long) = planningDao.deleteSlotById(slotId)
+    suspend fun deleteSlot(slotId: Long) {
+        planningDao.deleteSlotById(slotId)
+        cloudSyncManager?.deleteSlot(slotId)
+    }
 
     // --- Student Actions ---
-    suspend fun createStudent(student: StudentEntity): Long = planningDao.insertStudent(student)
+    suspend fun createStudent(student: StudentEntity): Long {
+        val id = planningDao.insertStudent(student)
+        val created = student.copy(id = id)
+        cloudSyncManager?.pushStudent(created)
+        return id
+    }
 
-    suspend fun updateStudent(student: StudentEntity) = planningDao.updateStudent(student)
+    suspend fun updateStudent(student: StudentEntity) {
+        planningDao.updateStudent(student)
+        cloudSyncManager?.pushStudent(student)
+    }
 
-    suspend fun deleteStudent(student: StudentEntity) = planningDao.deleteStudent(student)
+    suspend fun deleteStudent(student: StudentEntity) {
+        planningDao.deleteStudent(student)
+        cloudSyncManager?.deleteStudent(student.id)
+    }
 
     // --- Booking Actions ---
     suspend fun enrollStudent(slotId: Long, studentId: Long, isWaitingList: Boolean = false): Boolean {
         try {
-            planningDao.insertBooking(
-                BookingEntity(
-                    slotId = slotId,
-                    studentId = studentId,
-                    isWaitingList = isWaitingList
-                )
+            val booking = BookingEntity(
+                slotId = slotId,
+                studentId = studentId,
+                isWaitingList = isWaitingList
             )
+            val id = planningDao.insertBooking(booking)
+            cloudSyncManager?.pushBooking(booking.copy(id = id))
             return true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -172,6 +198,11 @@ class PlanningRepository(private val planningDao: PlanningDao) {
     }
 
     suspend fun unenrollStudent(slotId: Long, studentId: Long) {
+        // Find existing booking to delete from cloud
+        val bookings = planningDao.getBookingsForSlotSync(slotId)
+        bookings.find { it.studentId == studentId }?.let { b ->
+            cloudSyncManager?.deleteBooking(b.id)
+        }
         planningDao.deleteBookingBySlotAndStudent(slotId, studentId)
     }
 
@@ -179,6 +210,9 @@ class PlanningRepository(private val planningDao: PlanningDao) {
         planningDao.updateAttendance(bookingId, attended)
         if (attended) {
             planningDao.incrementCompletedSessions(studentId)
+        }
+        planningDao.getBookingById(bookingId)?.let { b ->
+            cloudSyncManager?.pushBooking(b.copy(attended = attended))
         }
     }
 
@@ -252,6 +286,8 @@ class PlanningRepository(private val planningDao: PlanningDao) {
         val createdIds = mutableListOf<Long>()
         for (slot in slotsToCreate) {
             val id = planningDao.insertSlot(slot)
+            val created = slot.copy(id = id)
+            cloudSyncManager?.pushSlot(created)
             createdIds.add(id)
         }
         return createdIds
@@ -291,12 +327,14 @@ class PlanningRepository(private val planningDao: PlanningDao) {
             )
             val newId = planningDao.insertStudent(newStudent)
             student = newStudent.copy(id = newId)
+            cloudSyncManager?.pushStudent(student)
         } else {
             // Update level/phone if needed
             if (student.level != level || (cleanPhone.isNotBlank() && student.phone != cleanPhone)) {
                 val updated = student.copy(level = level, phone = cleanPhone.ifBlank { student.phone })
                 planningDao.updateStudent(updated)
                 student = updated
+                cloudSyncManager?.pushStudent(student)
             }
         }
 

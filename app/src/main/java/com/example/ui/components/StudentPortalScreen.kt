@@ -131,7 +131,27 @@ fun StudentPortalScreen(
                         ) {
                             Text("🪂", fontSize = 20.sp)
                             Column {
-                                Text("Espace Élèves", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("Espace Élèves", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color(0xFF10B981).copy(alpha = 0.25f),
+                                        border = BorderStroke(1.dp, Color(0xFF10B981))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .background(Color(0xFF34D399), CircleShape)
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text("En direct", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6EE7B7))
+                                        }
+                                    }
+                                }
                                 Text("Inscriptions & Planning", fontSize = 11.sp, color = Color.White.copy(alpha = 0.75f))
                             }
                         }

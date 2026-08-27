@@ -8,8 +8,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -59,6 +61,8 @@ class MainActivity : ComponentActivity() {
                 val savedProfile by viewModel.savedProfile.collectAsStateWithLifecycle()
                 val instructorPin by viewModel.instructorPin.collectAsStateWithLifecycle()
                 val savedStandardDayConfig by viewModel.savedStandardDayConfig.collectAsStateWithLifecycle()
+                val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
+                val syncStatusMsg by viewModel.syncStatusMessage.collectAsStateWithLifecycle()
 
                 // Filter States
                 val selectedDateFilter by viewModel.selectedDateFilter.collectAsStateWithLifecycle()
@@ -163,12 +167,33 @@ class MainActivity : ComponentActivity() {
                                     ) {
                                         Text("🪂", fontSize = 20.sp)
                                         Column {
-                                            Text(
-                                                "Planning & Élèves",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 15.sp,
-                                                color = Color.White
-                                            )
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Text(
+                                                    "Planning & Élèves",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 15.sp,
+                                                    color = Color.White
+                                                )
+                                                // Sync Live Indicator
+                                                Surface(
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = Color(0xFF10B981).copy(alpha = 0.25f),
+                                                    border = BorderStroke(1.dp, Color(0xFF10B981))
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(6.dp)
+                                                                .background(Color(0xFF34D399), CircleShape)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text("Cloud Sync", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6EE7B7))
+                                                    }
+                                                }
+                                            }
                                             Text(
                                                 "Gonflage • Vol • Perf",
                                                 fontSize = 11.sp,
