@@ -1,21 +1,13 @@
 package com.example.ui.components
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,20 +15,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.*
+import com.example.data.model.PlanningLessonType
+import com.example.data.model.SlotWithBookings
+import com.example.data.model.StudentEntity
 import com.example.ui.theme.*
-import java.text.SimpleDateFormat
-import java.util.*
 
 @Composable
-fun AddEditSlotDialog(
-    slotToEdit: LessonSlotEntity?,
+fun AddOrEditSlotDialog(
+    initialDate: String,
+    initialSlot: com.example.data.model.LessonSlotEntity? = null,
     onDismiss: () -> Unit,
-    onSave: (
+    onConfirm: (
         dateIso: String,
         startTime: String,
         endTime: String,
@@ -44,98 +36,70 @@ fun AddEditSlotDialog(
         lessonType: String,
         location: String,
         maxCapacity: Int,
-        weatherStatus: String,
-        windInfo: String,
-        instructorNotes: String
+        notes: String
     ) -> Unit
 ) {
-    val todayIso = remember { SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date()) }
-
-    var dateIso by remember { mutableStateOf(slotToEdit?.dateIso ?: todayIso) }
-    var startTime by remember { mutableStateOf(slotToEdit?.startTime ?: "07:00") }
-    var endTime by remember { mutableStateOf(slotToEdit?.endTime ?: "09:30") }
-    var title by remember { mutableStateOf(slotToEdit?.title ?: "") }
-    var selectedLessonType by remember { mutableStateOf(slotToEdit?.lessonType ?: "GRAND_VOL") }
-    var location by remember { mutableStateOf(slotToEdit?.location ?: "Base Paramoteur - Piste Principale") }
-    var maxCapacity by remember { mutableIntStateOf(slotToEdit?.maxCapacity ?: 3) }
-    var weatherStatus by remember { mutableStateOf(slotToEdit?.weatherStatus ?: "OPTIMAL") }
-    var windInfo by remember { mutableStateOf(slotToEdit?.windInfo ?: "5-10 km/h Ouest - Laminaire") }
-    var instructorNotes by remember { mutableStateOf(slotToEdit?.instructorNotes ?: "") }
+    var dateIso by remember { mutableStateOf(initialSlot?.dateIso ?: initialDate) }
+    var startTime by remember { mutableStateOf(initialSlot?.startTime ?: "08:00") }
+    var endTime by remember { mutableStateOf(initialSlot?.endTime ?: "11:30") }
+    var title by remember { mutableStateOf(initialSlot?.title ?: "") }
+    var selectedType by remember {
+        mutableStateOf(
+            if (initialSlot != null) PlanningLessonType.fromCode(initialSlot.lessonType)
+            else PlanningLessonType.GONFLAGE
+        )
+    }
+    var location by remember { mutableStateOf(initialSlot?.location ?: "Terrain de décollage") }
+    var maxCapacity by remember { mutableIntStateOf(initialSlot?.maxCapacity ?: selectedType.defaultCapacity) }
+    var notes by remember { mutableStateOf(initialSlot?.notes ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(if (slotToEdit == null) "➕ Nouveau Créneau de Vol" else "✏️ Modifier le Créneau", fontWeight = FontWeight.Bold)
-            }
+            Text(
+                if (initialSlot == null) "Créer un créneau" else "Modifier le créneau",
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                color = HighDensityHeaderTitle
+            )
         },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                    .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Type de leçon
-                Text("Type de Séance & Activité :", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
+                // Type Selector: Gonflage, Vol, Perf
+                Text("Type de créneau :", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    ParamoteurLessonType.entries.take(3).forEach { t ->
-                        val isSelected = selectedLessonType == t.code
+                    PlanningLessonType.entries.forEach { type ->
+                        val isSelected = selectedType == type
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
                             color = if (isSelected) PrimaryBlue else HighDensityNavBar,
+                            border = BorderStroke(1.dp, if (isSelected) PrimaryBlue else BorderOutline.copy(alpha = 0.5f)),
                             modifier = Modifier
                                 .weight(1f)
                                 .clickable {
-                                    selectedLessonType = t.code
-                                    if (title.isBlank()) title = t.label
+                                    selectedType = type
+                                    if (initialSlot == null) {
+                                        maxCapacity = type.defaultCapacity
+                                        title = "Créneau ${type.label}"
+                                    }
                                 }
                         ) {
                             Column(
-                                modifier = Modifier.padding(vertical = 6.dp),
+                                modifier = Modifier.padding(vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text(t.emoji, fontSize = 16.sp)
+                                Text(type.emoji, fontSize = 18.sp)
                                 Text(
-                                    t.name.take(6),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color.White else HighDensityHeaderTitle
-                                )
-                            }
-                        }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    ParamoteurLessonType.entries.drop(3).forEach { t ->
-                        val isSelected = selectedLessonType == t.code
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) PrimaryBlue else HighDensityNavBar,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable {
-                                    selectedLessonType = t.code
-                                    if (title.isBlank()) title = t.label
-                                }
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(vertical = 6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(t.emoji, fontSize = 16.sp)
-                                Text(
-                                    t.name.take(7),
-                                    fontSize = 9.sp,
+                                    type.label,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isSelected) Color.White else HighDensityHeaderTitle
                                 )
@@ -144,7 +108,7 @@ fun AddEditSlotDialog(
                     }
                 }
 
-                // Date & Time
+                // Date & Time Inputs
                 OutlinedTextField(
                     value = dateIso,
                     onValueChange = { dateIso = it },
@@ -160,87 +124,56 @@ fun AddEditSlotDialog(
                     OutlinedTextField(
                         value = startTime,
                         onValueChange = { startTime = it },
-                        label = { Text("Début") },
-                        placeholder = { Text("07:00") },
+                        label = { Text("Début (HH:mm)") },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
                         value = endTime,
                         onValueChange = { endTime = it },
-                        label = { Text("Fin") },
-                        placeholder = { Text("09:30") },
+                        label = { Text("Fin (HH:mm)") },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                // Capacity Stepper
-                Text("Nombre de places limité :", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                // Capacity counter
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(
-                        onClick = { if (maxCapacity > 1) maxCapacity-- },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(HighDensityNavBar, CircleShape)
-                    ) {
-                        Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(16.dp))
-                    }
-                    Text(
-                        "$maxCapacity places max",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = PrimaryBlueDark
-                    )
-                    IconButton(
-                        onClick = { if (maxCapacity < 10) maxCapacity++ },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(HighDensityNavBar, CircleShape)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("Capacité max (places) :", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        IconButton(
+                            onClick = { if (maxCapacity > 1) maxCapacity-- },
+                            modifier = Modifier.size(32.dp).background(HighDensityNavBar, CircleShape)
+                        ) {
+                            Text("-", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                        Text("$maxCapacity", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        IconButton(
+                            onClick = { maxCapacity++ },
+                            modifier = Modifier.size(32.dp).background(HighDensityNavBar, CircleShape)
+                        ) {
+                            Text("+", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
                     }
                 }
 
-                // Title
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Titre / Intitulé du cours") },
-                    placeholder = { Text("Vol du Matin & Tours de Piste") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Location
                 OutlinedTextField(
                     value = location,
                     onValueChange = { location = it },
-                    label = { Text("Terrain / Lieu") },
+                    label = { Text("Lieu") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Wind & Météo
                 OutlinedTextField(
-                    value = windInfo,
-                    onValueChange = { windInfo = it },
-                    label = { Text("Vent / Conditions Météo") },
-                    placeholder = { Text("5-10 km/h Ouest laminaire") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Notes
-                OutlinedTextField(
-                    value = instructorNotes,
-                    onValueChange = { instructorNotes = it },
-                    label = { Text("Consignes & Notes instructeur") },
-                    placeholder = { Text("Radio chargée, gants, briefing 15 min avant") },
-                    minLines = 2,
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Notes / Informations pour les élèves") },
+                    maxLines = 2,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -248,22 +181,21 @@ fun AddEditSlotDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(
+                    val finalTitle = title.ifBlank { "Créneau ${selectedType.label}" }
+                    onConfirm(
                         dateIso,
                         startTime,
                         endTime,
-                        title,
-                        selectedLessonType,
+                        finalTitle,
+                        selectedType.code,
                         location,
                         maxCapacity,
-                        weatherStatus,
-                        windInfo,
-                        instructorNotes
+                        notes
                     )
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
-                Text(if (slotToEdit == null) "Créer le créneau" else "Enregistrer")
+                Text(if (initialSlot == null) "Créer le créneau" else "Enregistrer")
             }
         },
         dismissButton = {
@@ -275,45 +207,174 @@ fun AddEditSlotDialog(
 }
 
 @Composable
-fun AddEditStudentDialog(
-    studentToEdit: StudentEntity?,
+fun EnrollStudentDialog(
+    slotItem: SlotWithBookings,
+    allStudents: List<StudentEntity>,
     onDismiss: () -> Unit,
-    onSave: (
+    onEnroll: (slotId: Long, studentId: Long, isWaitingList: Boolean) -> Unit
+) {
+    val enrolledIds = slotItem.enrolledStudentIds
+    val availableStudents = allStudents.filter { !enrolledIds.contains(it.id) }
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredStudents = availableStudents.filter {
+        searchQuery.isBlank() || it.fullName.contains(searchQuery, ignoreCase = true) || it.phone.contains(searchQuery)
+    }
+
+    val isFull = slotItem.isFull
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Inscrire un participant",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = HighDensityHeaderTitle
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 350.dp)
+            ) {
+                if (isFull) {
+                    Surface(
+                        color = AmberAccent.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            "⚠️ Créneau complet ! L'élève sera placé en liste d'attente.",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AmberAccent,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Rechercher un participant...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (filteredStudents.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        Text("Aucun élève disponible à inscrire.", fontSize = 12.sp, color = SecondaryText)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(filteredStudents, key = { it.id }) { student ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = HighDensityNavBar,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onEnroll(slotItem.slot.id, student.id, isFull)
+                                        onDismiss()
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Surface(shape = CircleShape, color = PrimaryBlue, modifier = Modifier.size(24.dp)) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(student.initials, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            }
+                                        }
+                                        Column {
+                                            Text(student.fullName, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            Text(student.level, fontSize = 10.sp, color = SecondaryText)
+                                        }
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            onEnroll(slotItem.slot.id, student.id, isFull)
+                                            onDismiss()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isFull) AmberAccent else PrimaryBlue
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Text(if (isFull) "+ Attente" else "+ Inscrire", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fermer")
+            }
+        }
+    )
+}
+
+@Composable
+fun AddOrEditStudentDialog(
+    initialStudent: StudentEntity? = null,
+    onDismiss: () -> Unit,
+    onConfirm: (
         id: Long,
         firstName: String,
         lastName: String,
         phone: String,
         email: String,
         level: String,
-        equipment: String,
         notes: String
     ) -> Unit
 ) {
-    var firstName by remember { mutableStateOf(studentToEdit?.firstName ?: "") }
-    var lastName by remember { mutableStateOf(studentToEdit?.lastName ?: "") }
-    var phone by remember { mutableStateOf(studentToEdit?.phone ?: "") }
-    var email by remember { mutableStateOf(studentToEdit?.email ?: "") }
-    var level by remember { mutableStateOf(studentToEdit?.level ?: "Débutant - Pente école & Gonflage") }
-    var equipment by remember { mutableStateOf(studentToEdit?.equipment ?: "Matériel École") }
-    var notes by remember { mutableStateOf(studentToEdit?.notes ?: "") }
+    var firstName by remember { mutableStateOf(initialStudent?.firstName ?: "") }
+    var lastName by remember { mutableStateOf(initialStudent?.lastName ?: "") }
+    var phone by remember { mutableStateOf(initialStudent?.phone ?: "") }
+    var email by remember { mutableStateOf(initialStudent?.email ?: "") }
+    var selectedLevel by remember { mutableStateOf(initialStudent?.level ?: "Gonflage") }
+    var notes by remember { mutableStateOf(initialStudent?.notes ?: "") }
 
-    val levelsList = listOf(
-        "Débutant - Pente école & Gonflage",
-        "Premiers Grands Vols (Lâcher solo)",
-        "Autonome - Navigation GPS & Cross",
-        "Breveté - Perfectionnement & Maniabilité"
-    )
+    val levelOptions = listOf("Gonflage", "Vol", "Perf")
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(if (studentToEdit == null) "➕ Nouvel Élève Paramoteur" else "✏️ Modifier la Fiche Élève", fontWeight = FontWeight.Bold)
+            Text(
+                if (initialStudent == null) "Ajouter un participant" else "Modifier le profil",
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                color = HighDensityHeaderTitle
+            )
         },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                    .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
@@ -336,11 +397,37 @@ fun AddEditStudentDialog(
                     )
                 }
 
+                Text("Niveau / Activité :", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    levelOptions.forEach { lvl ->
+                        val isSelected = selectedLevel == lvl
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) PrimaryBlue else HighDensityNavBar,
+                            border = BorderStroke(1.dp, if (isSelected) PrimaryBlue else BorderOutline.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { selectedLevel = lvl }
+                        ) {
+                            Text(
+                                text = lvl,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.White else HighDensityHeaderTitle,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("Téléphone (pour WhatsApp)") },
-                    placeholder = { Text("06 12 34 56 78") },
+                    label = { Text("Téléphone") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -348,36 +435,7 @@ fun AddEditStudentDialog(
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    label = { Text("Email") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text("Niveau de formation :", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                levelsList.forEach { lvl ->
-                    val isSelected = level == lvl
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isSelected) PrimaryBlueContainer else HighDensityNavBar,
-                        border = if (isSelected) BorderStroke(1.dp, PrimaryBlue) else null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { level = lvl }
-                    ) {
-                        Text(
-                            lvl,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-                }
-
-                OutlinedTextField(
-                    value = equipment,
-                    onValueChange = { equipment = it },
-                    label = { Text("Matériel / Équipement") },
-                    placeholder = { Text("Matériel École ou Voile Dudek + Moster 185") },
+                    label = { Text("Email (optionnel)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -385,9 +443,8 @@ fun AddEditStudentDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Remarques / Progression") },
-                    placeholder = { Text("Très bon feeling gonflage face voile...") },
-                    minLines = 2,
+                    label = { Text("Notes & Remarques") },
+                    maxLines = 2,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -396,422 +453,26 @@ fun AddEditStudentDialog(
             Button(
                 onClick = {
                     if (firstName.isNotBlank() || lastName.isNotBlank()) {
-                        onSave(
-                            studentToEdit?.id ?: 0L,
+                        onConfirm(
+                            initialStudent?.id ?: 0L,
                             firstName,
                             lastName,
                             phone,
                             email,
-                            level,
-                            equipment,
+                            selectedLevel,
                             notes
                         )
                     }
                 },
+                enabled = firstName.isNotBlank() || lastName.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
-                Text(if (studentToEdit == null) "Ajouter l'élève" else "Enregistrer")
+                Text(if (initialStudent == null) "Ajouter" else "Enregistrer")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Annuler")
-            }
-        }
-    )
-}
-
-@Composable
-fun InstructorEnrollDialog(
-    slotItem: SlotWithBookings,
-    allStudents: List<StudentEntity>,
-    onDismiss: () -> Unit,
-    onEnroll: (studentId: Long, isWaitingList: Boolean) -> Unit
-) {
-    val enrolledIds = slotItem.enrolledStudentIds
-    val availableStudents = allStudents.filter { !enrolledIds.contains(it.id) }
-    val isFull = slotItem.isFull
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Column {
-                Text("Inscrire un élève au créneau", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(
-                    "${slotItem.slot.startTime}-${slotItem.slot.endTime} • ${slotItem.slot.title}",
-                    fontSize = 12.sp,
-                    color = SecondaryText
-                )
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 350.dp)
-            ) {
-                if (isFull) {
-                    Surface(
-                        color = Color(0xFFFEF3C7),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp)
-                    ) {
-                        Text(
-                            "⚠️ Créneau complet (${slotItem.slot.maxCapacity} places). L'élève sera ajouté en liste d'attente.",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AmberAccent,
-                            modifier = Modifier.padding(8.dp)
-                        )
-                    }
-                }
-
-                if (availableStudents.isEmpty()) {
-                    Text("Tous les élèves sont déjà inscrits à ce créneau.", fontSize = 12.sp, color = SecondaryText)
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(availableStudents) { student ->
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = HighDensityNavBar,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        onEnroll(student.id, isFull)
-                                    }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(student.fullName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        Text(student.level, fontSize = 10.sp, color = SecondaryText)
-                                    }
-                                    Icon(
-                                        Icons.Default.PersonAdd,
-                                        contentDescription = null,
-                                        tint = PrimaryBlue,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Fermer")
-            }
-        }
-    )
-}
-
-@Composable
-fun WeatherUpdateDialog(
-    slot: LessonSlotEntity,
-    onDismiss: () -> Unit,
-    onConfirm: (weatherStatus: String, windInfo: String) -> Unit
-) {
-    var status by remember { mutableStateOf(slot.weatherStatus) }
-    var wind by remember { mutableStateOf(slot.windInfo) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text("🌤️ Statut Météo du Créneau", fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Modifier les conditions pour : ${slot.startTime}-${slot.endTime} (${slot.title})", fontSize = 12.sp, color = SecondaryText)
-
-                SlotWeather.entries.forEach { w ->
-                    val isSelected = status == w.code
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isSelected) PrimaryBlueContainer else HighDensityNavBar,
-                        border = if (isSelected) BorderStroke(1.dp, PrimaryBlue) else null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { status = w.code }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(w.iconEmoji, fontSize = 16.sp)
-                            Text(
-                                w.label,
-                                fontSize = 13.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = wind,
-                    onValueChange = { wind = it },
-                    label = { Text("Détail vent / conditions") },
-                    placeholder = { Text("8 km/h OSO - Vent laminaire") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(status, wind) },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-            ) {
-                Text("Mettre à jour")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Annuler")
-            }
-        }
-    )
-}
-
-@Composable
-fun WhatsAppShareDialog(
-    content: String,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("💬", fontSize = 20.sp)
-                Text("Partage Planning WhatsApp", fontWeight = FontWeight.Bold)
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 350.dp)
-            ) {
-                Text(
-                    "Message récapitulatif généré pour le groupe WhatsApp des élèves :",
-                    fontSize = 11.sp,
-                    color = SecondaryText,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                )
-
-                Surface(
-                    color = HighDensityNavBar,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, BorderOutline),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                ) {
-                    Text(
-                        text = content,
-                        fontSize = 11.sp,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        modifier = Modifier
-                            .padding(10.dp)
-                            .verticalScroll(rememberScrollState())
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, content)
-                    }
-                    try {
-                        context.startActivity(Intent.createChooser(intent, "Partager le planning"))
-                        onDismiss()
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Impossible de partager", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess)
-            ) {
-                Text("Partager / WhatsApp", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            OutlinedButton(
-                onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                    clipboard?.setPrimaryClip(ClipData.newPlainText("Planning Paramoteur", content))
-                    Toast.makeText(context, "Planning copié dans le presse-papiers !", Toast.LENGTH_SHORT).show()
-                    onDismiss()
-                }
-            ) {
-                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Copier le texte")
-            }
-        }
-    )
-}
-
-@Composable
-fun StudentDetailDialog(
-    student: StudentEntity,
-    allSlotsWithBookings: List<SlotWithBookings>,
-    onDismiss: () -> Unit,
-    onEdit: () -> Unit,
-    onCall: () -> Unit,
-    onWhatsApp: () -> Unit
-) {
-    // Find all slots this student is registered to
-    val studentSlots = remember(allSlotsWithBookings, student) {
-        allSlotsWithBookings.filter { it.enrolledStudentIds.contains(student.id) }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Surface(
-                    color = PrimaryBlue,
-                    shape = CircleShape,
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(student.initials, fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                }
-                Column {
-                    Text(student.fullName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text(student.level, fontSize = 11.sp, color = SecondaryText)
-                }
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Info Grid
-                Surface(
-                    color = HighDensityNavBar,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row {
-                            Text("📞 Téléphone : ", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text(student.phone, fontSize = 11.sp)
-                        }
-                        if (student.email.isNotBlank()) {
-                            Row {
-                                Text("✉️ Email : ", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Text(student.email, fontSize = 11.sp)
-                            }
-                        }
-                        Row {
-                            Text("🪂 Matériel : ", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text(student.equipment, fontSize = 11.sp)
-                        }
-                        Row {
-                            Text("📊 Vols effectués : ", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text("${student.completedSessions} séances (${student.totalFlightHours} h de vol)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = PrimaryBlueDark)
-                        }
-                    }
-                }
-
-                if (student.notes.isNotBlank()) {
-                    Text("Carnet de progression & Notes :", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Surface(
-                        color = HighDensityContainer.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            student.notes,
-                            fontSize = 11.sp,
-                            color = HighDensityHeaderTitle,
-                            modifier = Modifier.padding(8.dp)
-                        )
-                    }
-                }
-
-                Text("Prochains créneaux réservés (${studentSlots.size}) :", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                if (studentSlots.isEmpty()) {
-                    Text("Aucun créneau programmé actuellement pour cet élève.", fontSize = 11.sp, color = SecondaryText)
-                } else {
-                    studentSlots.forEach { s ->
-                        Surface(
-                            color = HighDensityNavBar,
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column {
-                                    Text(
-                                        "${s.slot.dateIso} • ${s.slot.startTime}-${s.slot.endTime}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
-                                    )
-                                    Text(s.slot.title, fontSize = 10.sp, color = SecondaryText)
-                                }
-                                Text("Inscrit ✅", fontSize = 10.sp, color = GreenSuccess, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(
-                    onClick = onCall,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(13.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Appeler", fontSize = 11.sp)
-                }
-
-                Button(
-                    onClick = onWhatsApp,
-                    colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Text("💬 WhatsApp", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Fermer")
             }
         }
     )

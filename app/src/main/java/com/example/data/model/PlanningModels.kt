@@ -10,16 +10,11 @@ data class StudentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val firstName: String,
     val lastName: String,
-    val phone: String,
-    val email: String,
-    val level: String, // "Débutant - Pente école & Gonflage", "Premiers Grands Vols", "Autonome & Navigation", "Breveté Perfectionnement"
-    val equipment: String = "Matériel École",
-    val wingModel: String = "",
-    val motorModel: String = "",
-    val completedSessions: Int = 0,
-    val totalFlightHours: Double = 0.0,
+    val phone: String = "",
+    val email: String = "",
+    val level: String = "Gonflage", // Gonflage, Vol, Perf
     val notes: String = "",
-    val emergencyContact: String = "",
+    val completedSessions: Int = 0,
     val createdAt: Long = System.currentTimeMillis()
 ) {
     val fullName: String get() = "$firstName $lastName".trim()
@@ -30,17 +25,14 @@ data class StudentEntity(
 data class LessonSlotEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val dateIso: String, // "YYYY-MM-DD"
-    val startTime: String, // "07:00"
-    val endTime: String, // "09:30"
-    val title: String, // e.g. "Session Matin Calme - Pente École"
-    val lessonType: String, // GONFLAGE, GRAND_VOL, NAVIGATION, PRECISION, THEORIE, PERFECTIONNEMENT
-    val location: String = "Base Paramoteur - Piste Principale",
-    val maxCapacity: Int = 3,
-    val weatherStatus: String = "OPTIMAL", // OPTIMAL, TO_CONFIRM, CANCELLED, COMPLETED
-    val windInfo: String = "5-10 km/h Ouest",
-    val instructorNotes: String = "",
+    val startTime: String, // "08:00"
+    val endTime: String, // "12:00"
+    val title: String, // e.g. "Créneau Gonflage"
+    val lessonType: String, // GONFLAGE, VOL, PERF
+    val location: String = "Terrain de décollage",
+    val maxCapacity: Int = 4,
+    val notes: String = "",
     val isCancelled: Boolean = false,
-    val isCompleted: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -72,8 +64,7 @@ data class BookingEntity(
     val studentId: Long,
     val registeredAt: Long = System.currentTimeMillis(),
     val isWaitingList: Boolean = false,
-    val attended: Boolean = false,
-    val debriefNotes: String = ""
+    val attended: Boolean = false
 )
 
 data class BookingWithStudent(
@@ -92,40 +83,15 @@ data class SlotWithBookings(
     val enrolledStudentIds: Set<Long> get() = bookings.map { it.student.id }.toSet()
 }
 
-data class BookingWithSlot(
-    val booking: BookingEntity,
-    val slot: LessonSlotEntity
-)
-
-data class StudentWithBookings(
-    val student: StudentEntity,
-    val bookings: List<BookingWithSlot> = emptyList()
-)
-
-enum class ParamoteurLessonType(val code: String, val label: String, val emoji: String, val defaultCapacity: Int) {
-    GONFLAGE("GONFLAGE", "Gonflage & Pente École", "🪂", 4),
-    GRAND_VOL("GRAND_VOL", "Grands Vols Guidés Radio", "✈️", 2),
-    NAVIGATION("NAVIGATION", "Navigation GPS & Cross", "🧭", 3),
-    PRECISION("PRECISION", "Précision Atterrissage / Panne", "🎯", 3),
-    THEORIE("THEORIE", "Briefing Météo & Théorie", "📖", 8),
-    PERFECTIONNEMENT("PERFECTIONNEMENT", "Perfectionnement & Maniabilité", "🦅", 3);
+enum class PlanningLessonType(val code: String, val label: String, val emoji: String, val defaultCapacity: Int) {
+    GONFLAGE("GONFLAGE", "Gonflage", "🪂", 4),
+    VOL("VOL", "Vol", "✈️", 2),
+    PERF("PERF", "Perf", "🎯", 3);
 
     companion object {
-        fun fromCode(code: String): ParamoteurLessonType {
+        fun fromCode(code: String): PlanningLessonType {
             return entries.find { it.code.equals(code, ignoreCase = true) } ?: GONFLAGE
         }
     }
 }
 
-enum class SlotWeather(val code: String, val label: String, val iconEmoji: String) {
-    OPTIMAL("OPTIMAL", "Conditions Idéales", "🟢"),
-    TO_CONFIRM("TO_CONFIRM", "À Confirmer (Brise/Vent)", "🟡"),
-    CANCELLED("CANCELLED", "Annulé Météo", "🔴"),
-    COMPLETED("COMPLETED", "Séance Terminée", "✅");
-
-    companion object {
-        fun fromCode(code: String): SlotWeather {
-            return entries.find { it.code.equals(code, ignoreCase = true) } ?: OPTIMAL
-        }
-    }
-}

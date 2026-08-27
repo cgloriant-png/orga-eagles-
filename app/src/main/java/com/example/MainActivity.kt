@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -25,7 +26,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.*
 import com.example.ui.components.*
 import com.example.ui.theme.*
-import com.example.ui.viewmodel.AppUserMode
 import com.example.ui.viewmodel.PlanningViewModel
 
 class MainActivity : ComponentActivity() {
@@ -45,8 +45,6 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
 
                 // State from ViewModel
-                val userMode by viewModel.userMode.collectAsStateWithLifecycle()
-                val currentStudent by viewModel.currentStudent.collectAsStateWithLifecycle()
                 val allStudents by viewModel.allStudents.collectAsStateWithLifecycle()
                 val slotsWithBookings by viewModel.slotsWithBookings.collectAsStateWithLifecycle()
                 val filteredSlots by viewModel.filteredSlots.collectAsStateWithLifecycle()
@@ -56,22 +54,19 @@ class MainActivity : ComponentActivity() {
                 val selectedDateFilter by viewModel.selectedDateFilter.collectAsStateWithLifecycle()
                 val filterOnlyAvailable by viewModel.filterOnlyAvailable.collectAsStateWithLifecycle()
                 val filterLessonType by viewModel.filterLessonType.collectAsStateWithLifecycle()
-                val filterOnlyMyBookings by viewModel.filterOnlyMyBookings.collectAsStateWithLifecycle()
                 val studentSearchQuery by viewModel.studentSearchQuery.collectAsStateWithLifecycle()
                 val studentLevelFilter by viewModel.studentLevelFilter.collectAsStateWithLifecycle()
 
-                // Dialog States
+                // Dialog & Sheet States
                 var showAddSlotDialog by remember { mutableStateOf(false) }
+                var initialDateForSlotDialog by remember { mutableStateOf("2026-08-27") }
                 var slotToEdit by remember { mutableStateOf<LessonSlotEntity?>(null) }
                 var showAddStudentDialog by remember { mutableStateOf(false) }
                 var studentToEdit by remember { mutableStateOf<StudentEntity?>(null) }
-                var studentToViewDetail by remember { mutableStateOf<StudentEntity?>(null) }
-                var slotToInstructorEnroll by remember { mutableStateOf<SlotWithBookings?>(null) }
-                var slotToUpdateWeather by remember { mutableStateOf<LessonSlotEntity?>(null) }
-                var showWhatsAppShareDialog by remember { mutableStateOf(false) }
-                var whatsAppContent by remember { mutableStateOf("") }
+                var slotToEnrollStudent by remember { mutableStateOf<SlotWithBookings?>(null) }
+                var selectedDayForDetail by remember { mutableStateOf<String?>(null) }
 
-                // Navigation Bar Tab
+                // Navigation Bar Tab: 0 = Calendrier Visuel (Annuel/Trimestre/Mois), 1 = Liste Créneaux, 2 = Participants
                 var currentTab by remember { mutableIntStateOf(0) }
 
                 // Snackbar Host State
@@ -84,31 +79,81 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                fun openWhatsAppDirect(text: String) {
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, text)
+                        type = "text/plain"
+                        `package` = "com.whatsapp"
+                    }
+                    try {
+                        context.startActivity(sendIntent)
+                    } catch (e: Exception) {
+                        // Fallback generic share chooser if WhatsApp is not directly targeting
+                        val chooser = Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).apply {
+                                putExtra(Intent.EXTRA_TEXT, text)
+                                type = "text/plain"
+                            },
+                            "Partager le planning"
+                        )
+                        try {
+                            context.startActivity(chooser)
+                        } catch (ex: Exception) {
+                            Toast.makeText(context, "Impossible d'ouvrir le partage", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     contentWindowInsets = WindowInsets.safeDrawing,
                     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
                     topBar = {
-                        PlanningHeader(
-                            userMode = userMode,
-                            onUserModeChange = { mode -> viewModel.setUserMode(mode) },
-                            currentStudent = currentStudent,
-                            allStudents = allStudents,
-                            onSelectCurrentStudent = { s -> viewModel.setCurrentStudent(s) },
-                            onOpenWhatsAppShare = {
-                                whatsAppContent = viewModel.getWhatsAppText()
-                                showWhatsAppShareDialog = true
-                            },
-                            onQuickGenerateWeekend = { viewModel.quickGenerateWeekendSlots() },
-                            onOpenAddSlot = {
-                                slotToEdit = null
-                                showAddSlotDialog = true
-                            },
-                            onOpenAddStudent = {
-                                studentToEdit = null
-                                showAddStudentDialog = true
+                        Surface(
+                            color = HighDensityHeaderTitle,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text("🪂", fontSize = 20.sp)
+                                    Column {
+                                        Text(
+                                            "Planning & Créneaux",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            "Gonflage • Vol • Perf",
+                                            fontSize = 11.sp,
+                                            color = Color.White.copy(alpha = 0.75f)
+                                        )
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { openWhatsAppDirect(viewModel.getWhatsAppText()) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(34.dp)
+                                ) {
+                                    Text("💬", fontSize = 13.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("WhatsApp", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
-                        )
+                        }
                     },
                     bottomBar = {
                         NavigationBar(
@@ -122,10 +167,10 @@ class MainActivity : ComponentActivity() {
                                 icon = {
                                     Icon(
                                         if (currentTab == 0) Icons.Default.CalendarMonth else Icons.Outlined.CalendarMonth,
-                                        contentDescription = "Planning"
+                                        contentDescription = "Planning Visuel"
                                     )
                                 },
-                                label = { Text("Planning", fontWeight = if (currentTab == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
+                                label = { Text("Visuel", fontWeight = if (currentTab == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = PrimaryBlue,
                                     selectedTextColor = PrimaryBlue,
@@ -137,20 +182,12 @@ class MainActivity : ComponentActivity() {
                                 selected = currentTab == 1,
                                 onClick = { currentTab = 1 },
                                 icon = {
-                                    BadgedBox(
-                                        badge = {
-                                            if (allStudents.isNotEmpty()) {
-                                                Badge { Text("${allStudents.size}") }
-                                            }
-                                        }
-                                    ) {
-                                        Icon(
-                                            if (currentTab == 1) Icons.Default.People else Icons.Outlined.People,
-                                            contentDescription = "Élèves"
-                                        )
-                                    }
+                                    Icon(
+                                        if (currentTab == 1) Icons.Default.FormatListBulleted else Icons.Outlined.FormatListBulleted,
+                                        contentDescription = "Liste Créneaux"
+                                    )
                                 },
-                                label = { Text("Élèves", fontWeight = if (currentTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
+                                label = { Text("Créneaux", fontWeight = if (currentTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = PrimaryBlue,
                                     selectedTextColor = PrimaryBlue,
@@ -162,12 +199,20 @@ class MainActivity : ComponentActivity() {
                                 selected = currentTab == 2,
                                 onClick = { currentTab = 2 },
                                 icon = {
-                                    Icon(
-                                        if (currentTab == 2) Icons.Default.Assessment else Icons.Outlined.Assessment,
-                                        contentDescription = "École"
-                                    )
+                                    BadgedBox(
+                                        badge = {
+                                            if (allStudents.isNotEmpty()) {
+                                                Badge { Text("${allStudents.size}") }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            if (currentTab == 2) Icons.Default.People else Icons.Outlined.People,
+                                            contentDescription = "Participants"
+                                        )
+                                    }
                                 },
-                                label = { Text("Vols du Jour", fontWeight = if (currentTab == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
+                                label = { Text("Participants", fontWeight = if (currentTab == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = PrimaryBlue,
                                     selectedTextColor = PrimaryBlue,
@@ -177,32 +222,31 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     floatingActionButton = {
-                        if (userMode == AppUserMode.INSTRUCTOR) {
-                            if (currentTab == 0) {
-                                ExtendedFloatingActionButton(
-                                    onClick = {
-                                        slotToEdit = null
-                                        showAddSlotDialog = true
-                                    },
-                                    containerColor = PrimaryBlue,
-                                    contentColor = Color.White,
-                                    elevation = FloatingActionButtonDefaults.elevation(6.dp)
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Créer un Créneau", fontWeight = FontWeight.Bold)
-                                }
-                            } else if (currentTab == 1) {
-                                FloatingActionButton(
-                                    onClick = {
-                                        studentToEdit = null
-                                        showAddStudentDialog = true
-                                    },
-                                    containerColor = PrimaryBlue,
-                                    contentColor = Color.White
-                                ) {
-                                    Icon(Icons.Default.PersonAdd, contentDescription = "Ajouter un élève")
-                                }
+                        if (currentTab != 2) {
+                            ExtendedFloatingActionButton(
+                                onClick = {
+                                    slotToEdit = null
+                                    initialDateForSlotDialog = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.FRANCE).format(java.util.Date())
+                                    showAddSlotDialog = true
+                                },
+                                containerColor = PrimaryBlue,
+                                contentColor = Color.White,
+                                elevation = FloatingActionButtonDefaults.elevation(6.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Nouveau Créneau", fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            FloatingActionButton(
+                                onClick = {
+                                    studentToEdit = null
+                                    showAddStudentDialog = true
+                                },
+                                containerColor = PrimaryBlue,
+                                contentColor = Color.White
+                            ) {
+                                Icon(Icons.Default.PersonAdd, contentDescription = "Ajouter un participant")
                             }
                         }
                     }
@@ -213,64 +257,62 @@ class MainActivity : ComponentActivity() {
                             .padding(innerPadding)
                     ) {
                         when (currentTab) {
-                            0 -> PlanningScreen(
+                            0 -> VisualCalendarPlanningScreen(
+                                slots = slotsWithBookings,
+                                onSelectDay = { dateIso ->
+                                    selectedDayForDetail = dateIso
+                                },
+                                onOpenAddSlotForDate = { dateIso ->
+                                    slotToEdit = null
+                                    initialDateForSlotDialog = dateIso
+                                    showAddSlotDialog = true
+                                },
+                                onOpenWhatsAppShare = {
+                                    openWhatsAppDirect(viewModel.getWhatsAppText())
+                                }
+                            )
+
+                            1 -> PlanningScreen(
                                 slots = filteredSlots,
-                                userMode = userMode,
-                                currentStudent = currentStudent,
                                 selectedDateFilter = selectedDateFilter,
                                 onDateFilterChange = { df -> viewModel.setDateFilter(df) },
-                                filterOnlyAvailable = filterOnlyAvailable,
-                                onToggleFilterOnlyAvailable = { viewModel.toggleFilterOnlyAvailable() },
-                                filterLessonType = filterLessonType,
-                                onLessonTypeFilterChange = { tf -> viewModel.setLessonTypeFilter(tf) },
-                                filterOnlyMyBookings = filterOnlyMyBookings,
-                                onToggleFilterOnlyMyBookings = { viewModel.toggleFilterOnlyMyBookings() },
-                                onToggleStudentEnrollment = { slot, student ->
-                                    viewModel.toggleStudentEnrollment(slot, student)
+                                selectedTypeFilter = filterLessonType,
+                                onTypeFilterChange = { tf -> viewModel.setLessonTypeFilter(tf) },
+                                onlyAvailable = filterOnlyAvailable,
+                                onToggleOnlyAvailable = { viewModel.toggleFilterOnlyAvailable() },
+                                onOpenAddSlot = {
+                                    slotToEdit = null
+                                    initialDateForSlotDialog = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.FRANCE).format(java.util.Date())
+                                    showAddSlotDialog = true
                                 },
-                                onOpenInstructorEnroll = { slotItem ->
-                                    slotToInstructorEnroll = slotItem
+                                onOpenEnrollStudent = { slotItem ->
+                                    slotToEnrollStudent = slotItem
                                 },
-                                onInstructorUnenroll = { slotId, studentId ->
-                                    viewModel.instructorUnenroll(slotId, studentId)
+                                onUnenrollStudent = { slotId, studentId ->
+                                    viewModel.unenrollStudent(slotId, studentId)
                                 },
                                 onToggleAttendance = { bookingId, studentId, attended ->
                                     viewModel.toggleAttendance(bookingId, studentId, attended)
                                 },
-                                onUpdateWeather = { slot ->
-                                    slotToUpdateWeather = slot
-                                },
                                 onEditSlot = { slot ->
                                     slotToEdit = slot
+                                    initialDateForSlotDialog = slot.dateIso
                                     showAddSlotDialog = true
                                 },
                                 onDeleteSlot = { slotId ->
                                     viewModel.deleteSlot(slotId)
-                                },
-                                onSelectStudentToView = { student ->
-                                    studentToViewDetail = student
-                                },
-                                onOpenAddSlot = {
-                                    slotToEdit = null
-                                    showAddSlotDialog = true
-                                },
-                                onQuickGenerateWeekend = {
-                                    viewModel.quickGenerateWeekendSlots()
                                 }
                             )
 
-                            1 -> StudentsScreen(
+                            2 -> StudentsScreen(
                                 students = filteredStudents,
                                 searchQuery = studentSearchQuery,
                                 onSearchQueryChange = { q -> viewModel.setStudentSearchQuery(q) },
-                                levelFilter = studentLevelFilter,
+                                selectedLevelFilter = studentLevelFilter,
                                 onLevelFilterChange = { l -> viewModel.setStudentLevelFilter(l) },
                                 onOpenAddStudent = {
                                     studentToEdit = null
                                     showAddStudentDialog = true
-                                },
-                                onSelectStudent = { s ->
-                                    studentToViewDetail = s
                                 },
                                 onEditStudent = { s ->
                                     studentToEdit = s
@@ -280,45 +322,52 @@ class MainActivity : ComponentActivity() {
                                     viewModel.deleteStudent(s)
                                 }
                             )
-
-                            2 -> SchoolOverviewScreen(
-                                students = allStudents,
-                                slotsWithBookings = slotsWithBookings,
-                                onToggleAttendance = { bookingId, studentId, attended ->
-                                    viewModel.toggleAttendance(bookingId, studentId, attended)
-                                },
-                                onOpenWhatsAppShare = {
-                                    whatsAppContent = viewModel.getWhatsAppText()
-                                    showWhatsAppShareDialog = true
-                                },
-                                onQuickGenerateWeekend = {
-                                    viewModel.quickGenerateWeekendSlots()
-                                },
-                                onOpenAddSlot = {
-                                    slotToEdit = null
-                                    showAddSlotDialog = true
-                                },
-                                onOpenAddStudent = {
-                                    studentToEdit = null
-                                    showAddStudentDialog = true
-                                },
-                                onSelectStudent = { s ->
-                                    studentToViewDetail = s
-                                }
-                            )
                         }
                     }
                 }
 
+                // Modal Detail Sheet when user taps a calendar day
+                selectedDayForDetail?.let { dateIso ->
+                    val daySlots = slotsWithBookings.filter { it.slot.dateIso == dateIso }
+                    DayDetailSheet(
+                        dateIso = dateIso,
+                        slots = daySlots,
+                        onDismiss = { selectedDayForDetail = null },
+                        onOpenAddSlot = {
+                            slotToEdit = null
+                            initialDateForSlotDialog = dateIso
+                            showAddSlotDialog = true
+                        },
+                        onOpenEnrollStudent = { slotItem ->
+                            slotToEnrollStudent = slotItem
+                        },
+                        onUnenrollStudent = { slotId, studentId ->
+                            viewModel.unenrollStudent(slotId, studentId)
+                        },
+                        onToggleAttendance = { bookingId, studentId, attended ->
+                            viewModel.toggleAttendance(bookingId, studentId, attended)
+                        },
+                        onEditSlot = { slot ->
+                            slotToEdit = slot
+                            initialDateForSlotDialog = slot.dateIso
+                            showAddSlotDialog = true
+                        },
+                        onDeleteSlot = { slotId ->
+                            viewModel.deleteSlot(slotId)
+                        }
+                    )
+                }
+
                 // Dialog: Add / Edit Slot
                 if (showAddSlotDialog) {
-                    AddEditSlotDialog(
-                        slotToEdit = slotToEdit,
+                    AddOrEditSlotDialog(
+                        initialDate = initialDateForSlotDialog,
+                        initialSlot = slotToEdit,
                         onDismiss = {
                             showAddSlotDialog = false
                             slotToEdit = null
                         },
-                        onSave = { dateIso, startTime, endTime, title, lessonType, location, maxCapacity, weatherStatus, windInfo, instructorNotes ->
+                        onConfirm = { dateIso, startTime, endTime, title, lessonType, location, maxCapacity, notes ->
                             if (slotToEdit == null) {
                                 viewModel.createSlot(
                                     dateIso = dateIso,
@@ -328,9 +377,7 @@ class MainActivity : ComponentActivity() {
                                     lessonType = lessonType,
                                     location = location,
                                     maxCapacity = maxCapacity,
-                                    weatherStatus = weatherStatus,
-                                    windInfo = windInfo,
-                                    instructorNotes = instructorNotes
+                                    notes = notes
                                 )
                             } else {
                                 val updated = slotToEdit!!.copy(
@@ -341,9 +388,7 @@ class MainActivity : ComponentActivity() {
                                     lessonType = lessonType,
                                     location = location,
                                     maxCapacity = maxCapacity,
-                                    weatherStatus = weatherStatus,
-                                    windInfo = windInfo,
-                                    instructorNotes = instructorNotes
+                                    notes = notes
                                 )
                                 viewModel.updateSlot(updated)
                             }
@@ -355,13 +400,13 @@ class MainActivity : ComponentActivity() {
 
                 // Dialog: Add / Edit Student
                 if (showAddStudentDialog) {
-                    AddEditStudentDialog(
-                        studentToEdit = studentToEdit,
+                    AddOrEditStudentDialog(
+                        initialStudent = studentToEdit,
                         onDismiss = {
                             showAddStudentDialog = false
                             studentToEdit = null
                         },
-                        onSave = { id, firstName, lastName, phone, email, level, equipment, notes ->
+                        onConfirm = { id, firstName, lastName, phone, email, level, notes ->
                             viewModel.saveStudent(
                                 id = id,
                                 firstName = firstName,
@@ -369,7 +414,6 @@ class MainActivity : ComponentActivity() {
                                 phone = phone,
                                 email = email,
                                 level = level,
-                                equipment = equipment,
                                 notes = notes
                             )
                             showAddStudentDialog = false
@@ -378,66 +422,15 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Dialog: Instructor Enroll Student
-                slotToInstructorEnroll?.let { slotItem ->
-                    InstructorEnrollDialog(
+                // Dialog: Enroll Student in Slot
+                slotToEnrollStudent?.let { slotItem ->
+                    EnrollStudentDialog(
                         slotItem = slotItem,
                         allStudents = allStudents,
-                        onDismiss = { slotToInstructorEnroll = null },
-                        onEnroll = { studentId, isWaitingList ->
-                            viewModel.instructorEnroll(slotItem.slot.id, studentId, isWaitingList)
-                            slotToInstructorEnroll = null
-                        }
-                    )
-                }
-
-                // Dialog: Update Slot Weather
-                slotToUpdateWeather?.let { slot ->
-                    WeatherUpdateDialog(
-                        slot = slot,
-                        onDismiss = { slotToUpdateWeather = null },
-                        onConfirm = { status, wind ->
-                            viewModel.setWeather(slot.id, status, wind)
-                            slotToUpdateWeather = null
-                        }
-                    )
-                }
-
-                // Dialog: WhatsApp Share
-                if (showWhatsAppShareDialog) {
-                    WhatsAppShareDialog(
-                        content = whatsAppContent,
-                        onDismiss = { showWhatsAppShareDialog = false }
-                    )
-                }
-
-                // Dialog: Student Detail Sheet
-                studentToViewDetail?.let { student ->
-                    StudentDetailDialog(
-                        student = student,
-                        allSlotsWithBookings = slotsWithBookings,
-                        onDismiss = { studentToViewDetail = null },
-                        onEdit = {
-                            studentToEdit = student
-                            studentToViewDetail = null
-                            showAddStudentDialog = true
-                        },
-                        onCall = {
-                            val intent = Intent(Intent.ACTION_DIAL).apply {
-                                data = Uri.parse("tel:${student.phone.replace(" ", "")}")
-                            }
-                            try { context.startActivity(intent) } catch (e: Exception) {
-                                Toast.makeText(context, "Impossible de composer le numéro", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onWhatsApp = {
-                            val cleanNumber = student.phone.replace(" ", "").replace("^0".toRegex(), "33")
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                data = Uri.parse("https://wa.me/$cleanNumber")
-                            }
-                            try { context.startActivity(intent) } catch (e: Exception) {
-                                Toast.makeText(context, "WhatsApp non disponible", Toast.LENGTH_SHORT).show()
-                            }
+                        onDismiss = { slotToEnrollStudent = null },
+                        onEnroll = { slotId, studentId, isWaitingList ->
+                            viewModel.enrollStudent(slotId, studentId, isWaitingList)
+                            slotToEnrollStudent = null
                         }
                     )
                 }
