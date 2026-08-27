@@ -45,7 +45,8 @@ fun StudentPortalScreen(
     onUnenroll: (slotId: Long, studentId: Long) -> Unit,
     allStudents: List<StudentEntity>,
     onVerifyPin: (String) -> Boolean,
-    onSwitchToInstructorMode: () -> Unit
+    onSwitchToInstructorMode: () -> Unit,
+    onForceSync: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -156,17 +157,27 @@ fun StudentPortalScreen(
                             }
                         }
 
-                        // Moniteur Access button with PIN Lock
-                        OutlinedButton(
-                            onClick = { showPinDialog = true },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.height(32.dp)
-                        ) {
-                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Accès Moniteur", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // Sync button
+                            IconButton(
+                                onClick = onForceSync,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Actualiser", tint = Color.White)
+                            }
+
+                            // Moniteur Access button with PIN Lock
+                            OutlinedButton(
+                                onClick = { showPinDialog = true },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Accès Moniteur", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
 

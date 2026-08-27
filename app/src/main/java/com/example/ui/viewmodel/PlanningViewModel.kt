@@ -21,6 +21,7 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     // Cloud Sync status
     val syncStatus: StateFlow<SyncStatus>
     val syncStatusMessage: StateFlow<String>
+    val lastSyncTime: StateFlow<String>
 
     // Base data flows
     val allStudents: StateFlow<List<StudentEntity>>
@@ -101,6 +102,7 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
         syncStatus = cloudSyncManager.syncStatus
         syncStatusMessage = cloudSyncManager.statusMessage
+        lastSyncTime = cloudSyncManager.lastSyncTime
 
         allStudents = repository.allStudents
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -110,10 +112,6 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
         studentsWithStats = repository.studentsWithStats
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-        viewModelScope.launch {
-            repository.initializeSampleDataIfNeeded()
-        }
     }
 
     fun toggleAppMode() {
@@ -140,6 +138,10 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
     fun verifyInstructorPin(enteredPin: String): Boolean {
         return enteredPin.trim() == _instructorPin.value.trim()
+    }
+
+    fun forceSync() {
+        cloudSyncManager.forceSyncNow()
     }
 
     fun saveDefaultStandardDayConfig(config: StandardDayConfig) {

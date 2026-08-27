@@ -141,6 +141,9 @@ class MainActivity : ComponentActivity() {
                         },
                         onSwitchToInstructorMode = {
                             viewModel.setAppMode(false)
+                        },
+                        onForceSync = {
+                            viewModel.forceSync()
                         }
                     )
                 } else {
@@ -202,7 +205,15 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
 
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        // Refresh / Force Sync button
+                                        IconButton(
+                                            onClick = { viewModel.forceSync() },
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Icon(Icons.Default.Refresh, contentDescription = "Actualiser Cloud", tint = Color.White)
+                                        }
+
                                         // Security / PIN Settings button
                                         IconButton(
                                             onClick = { showPinSettingsDialog = true },

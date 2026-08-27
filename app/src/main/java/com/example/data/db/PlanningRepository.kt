@@ -66,90 +66,18 @@ class PlanningRepository(
         }
     }
 
-    suspend fun initializeSampleDataIfNeeded() {
-        val studentCount = planningDao.getStudentsCount()
-        val slotCount = planningDao.getSlotsCount()
-        if (studentCount == 0 && slotCount == 0) {
-            val sampleStudents = listOf(
-                StudentEntity(firstName = "Julien", lastName = "Mercier", phone = "06 12 34 56 78", level = "Gonflage", notes = "Très assidu"),
-                StudentEntity(firstName = "Sophie", lastName = "Bernard", phone = "06 23 45 67 89", level = "Vol", notes = "Prête pour autonomie"),
-                StudentEntity(firstName = "Thomas", lastName = "Laurent", phone = "06 34 56 78 90", level = "Perf", notes = "Travail en thermique"),
-                StudentEntity(firstName = "Lucas", lastName = "Dubois", phone = "06 45 67 89 01", level = "Vol"),
-                StudentEntity(firstName = "Émilie", lastName = "Moreau", phone = "06 56 78 90 12", level = "Gonflage"),
-                StudentEntity(firstName = "Maxime", lastName = "Petit", phone = "06 67 89 01 23", level = "Perf")
-            )
-            val studentIds = mutableListOf<Long>()
-            for (student in sampleStudents) {
-                studentIds.add(planningDao.insertStudent(student))
-            }
-
-            // Seed a few calendar slots
-            val cal = Calendar.getInstance()
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE)
-
-            val d0 = dateFormat.format(cal.time)
-            cal.add(Calendar.DAY_OF_YEAR, 1)
-            val d1 = dateFormat.format(cal.time)
-            cal.add(Calendar.DAY_OF_YEAR, 1)
-            val d2 = dateFormat.format(cal.time)
-
-            // Slot 1 : Gonflage matin (1h à 3h après lever, ex 07:30 - 09:30)
-            val slotId1 = planningDao.insertSlot(
-                LessonSlotEntity(
-                    dateIso = d0,
-                    startTime = "07:30",
-                    endTime = "09:30",
-                    title = "Matin Gonflage (1h à 3h après lever)",
-                    lessonType = "GONFLAGE",
-                    location = "Pente École - Plouharnel (56)",
-                    maxCapacity = 4,
-                    notes = "Brise de mer matinale idéale"
-                )
-            )
-
-            // Slot 2 : Vol matin (Lever du soleil, 06:30 - 08:30)
-            val slotId2 = planningDao.insertSlot(
-                LessonSlotEntity(
-                    dateIso = d1,
-                    startTime = "06:30",
-                    endTime = "08:30",
-                    title = "Matin Vol (Lever -> +2h)",
-                    lessonType = "VOL",
-                    location = "Décollage Sud - Plouharnel (56)",
-                    maxCapacity = 2,
-                    notes = "Air calme et laminaire"
-                )
-            )
-
-            // Slot 3 : Soir Gonflage (-3h à -1h avant coucher, 18:00 - 20:00)
-            val slotId3 = planningDao.insertSlot(
-                LessonSlotEntity(
-                    dateIso = d2,
-                    startTime = "18:00",
-                    endTime = "20:00",
-                    title = "Soir Gonflage (-3h à -1h avant coucher)",
-                    lessonType = "GONFLAGE",
-                    location = "Pente École - Plouharnel (56)",
-                    maxCapacity = 4,
-                    notes = "Travail sur les trajectoires et face voile"
-                )
-            )
-
-            if (studentIds.size >= 4) {
-                planningDao.insertBooking(BookingEntity(slotId = slotId1, studentId = studentIds[0], isWaitingList = false))
-                planningDao.insertBooking(BookingEntity(slotId = slotId1, studentId = studentIds[4], isWaitingList = false))
-                planningDao.insertBooking(BookingEntity(slotId = slotId2, studentId = studentIds[1], isWaitingList = false))
-                planningDao.insertBooking(BookingEntity(slotId = slotId2, studentId = studentIds[3], isWaitingList = false))
-            }
-        }
+    private fun generateUniqueId(): Long {
+        val ts = System.currentTimeMillis() and 0x1FFFFFFFFFFL
+        val rand = (1000..9999).random().toLong()
+        return ts * 10000L + rand
     }
 
     // --- Slot Actions ---
     suspend fun createSlot(slot: LessonSlotEntity): Long {
-        val id = planningDao.insertSlot(slot)
-        val created = slot.copy(id = id)
-        cloudSyncManager?.pushSlot(created)
-        return id
+        val slotWithId = if (slot.id <= 0L) slot.copy(id = generateUniqueId()) else slot
+        planningDao.insertSlot(slotWithId)
+        cloudSyncManager?.pushSlot(slotWithId)
+        return slotWithId.id
     }
 
     suspend fun updateSlot(slot: LessonSlotEntity) {
@@ -164,10 +92,10 @@ class PlanningRepository(
 
     // --- Student Actions ---
     suspend fun createStudent(student: StudentEntity): Long {
-        val id = planningDao.insertStudent(student)
-        val created = student.copy(id = id)
-        cloudSyncManager?.pushStudent(created)
-        return id
+        val studentWithId = if (student.id <= 0L) student.copy(id = generateUniqueId()) else student
+        planningDao.insertStudent(studentWithId)
+        cloudSyncManager?.pushStudent(studentWithId)
+        return studentWithId.id
     }
 
     suspend fun updateStudent(student: StudentEntity) {
@@ -184,12 +112,13 @@ class PlanningRepository(
     suspend fun enrollStudent(slotId: Long, studentId: Long, isWaitingList: Boolean = false): Boolean {
         try {
             val booking = BookingEntity(
+                id = generateUniqueId(),
                 slotId = slotId,
                 studentId = studentId,
                 isWaitingList = isWaitingList
             )
-            val id = planningDao.insertBooking(booking)
-            cloudSyncManager?.pushBooking(booking.copy(id = id))
+            planningDao.insertBooking(booking)
+            cloudSyncManager?.pushBooking(booking)
             return true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -285,10 +214,10 @@ class PlanningRepository(
 
         val createdIds = mutableListOf<Long>()
         for (slot in slotsToCreate) {
-            val id = planningDao.insertSlot(slot)
-            val created = slot.copy(id = id)
-            cloudSyncManager?.pushSlot(created)
-            createdIds.add(id)
+            val slotWithId = slot.copy(id = generateUniqueId())
+            planningDao.insertSlot(slotWithId)
+            cloudSyncManager?.pushSlot(slotWithId)
+            createdIds.add(slotWithId.id)
         }
         return createdIds
     }
@@ -318,6 +247,7 @@ class PlanningRepository(
         // 2. If not found, create new student in database
         if (student == null) {
             val newStudent = StudentEntity(
+                id = generateUniqueId(),
                 firstName = cleanFirst.ifBlank { "Élève" },
                 lastName = cleanLast,
                 phone = cleanPhone,
@@ -325,8 +255,8 @@ class PlanningRepository(
                 level = level,
                 notes = "Inscrit via Version Élève"
             )
-            val newId = planningDao.insertStudent(newStudent)
-            student = newStudent.copy(id = newId)
+            planningDao.insertStudent(newStudent)
+            student = newStudent
             cloudSyncManager?.pushStudent(student)
         } else {
             // Update level/phone if needed

@@ -13,6 +13,9 @@ interface PlanningDao {
     @Query("SELECT * FROM students ORDER BY lastName ASC, firstName ASC")
     fun getAllStudents(): Flow<List<StudentEntity>>
 
+    @Query("SELECT * FROM students")
+    suspend fun getAllStudentsList(): List<StudentEntity>
+
     @Query("SELECT * FROM students WHERE id = :id LIMIT 1")
     suspend fun getStudentById(id: Long): StudentEntity?
 
@@ -43,6 +46,9 @@ interface PlanningDao {
     // --- Slots ---
     @Query("SELECT * FROM lesson_slots ORDER BY dateIso ASC, startTime ASC")
     fun getAllSlots(): Flow<List<LessonSlotEntity>>
+
+    @Query("SELECT * FROM lesson_slots")
+    suspend fun getAllSlotsList(): List<LessonSlotEntity>
 
     @Query("SELECT * FROM lesson_slots WHERE dateIso = :dateIso ORDER BY startTime ASC")
     fun getSlotsByDate(dateIso: String): Flow<List<LessonSlotEntity>>
@@ -83,6 +89,9 @@ interface PlanningDao {
 
     @Query("SELECT * FROM bookings")
     fun getAllBookings(): Flow<List<BookingEntity>>
+
+    @Query("SELECT * FROM bookings")
+    suspend fun getAllBookingsList(): List<BookingEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBooking(booking: BookingEntity): Long
