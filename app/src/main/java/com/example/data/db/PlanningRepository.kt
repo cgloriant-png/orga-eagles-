@@ -31,6 +31,36 @@ class PlanningRepository(private val planningDao: PlanningDao) {
         }
     }
 
+    // Combined Flow: Students with detailed stats & booking history
+    val studentsWithStats: Flow<List<StudentWithStats>> = combine(
+        allStudents,
+        allBookings,
+        allSlots
+    ) { students, bookings, slots ->
+        val slotMap = slots.associateBy { it.id }
+        val bookingByStudent = bookings.groupBy { it.studentId }
+
+        students.map { student ->
+            val sBookings = bookingByStudent[student.id].orEmpty()
+            val total = sBookings.size
+            val attended = sBookings.count { it.attended }
+            val waiting = sBookings.count { it.isWaitingList }
+            val history = sBookings.mapNotNull { b ->
+                slotMap[b.slotId]?.let { s -> BookingWithSlotInfo(b, s) }
+            }.sortedByDescending { it.slot.dateIso + " " + it.slot.startTime }
+            val upcoming = history.count { !it.booking.attended && !it.slot.isCancelled }
+
+            StudentWithStats(
+                student = student,
+                totalBookings = total,
+                attendedBookings = attended,
+                upcomingBookings = upcoming,
+                waitingListBookings = waiting,
+                bookingHistory = history
+            )
+        }
+    }
+
     suspend fun initializeSampleDataIfNeeded() {
         val count = planningDao.getStudentsCount()
         if (count == 0) {
@@ -152,6 +182,162 @@ class PlanningRepository(private val planningDao: PlanningDao) {
         planningDao.updateAttendance(bookingId, attended)
         if (attended) {
             planningDao.incrementCompletedSessions(studentId)
+        }
+    }
+
+    // --- Standard Day Generation ("Journée Type") ---
+    suspend fun createStandardDaySlots(
+        dateIso: String,
+        config: StandardDayConfig = StandardDayConfig()
+    ): List<Long> {
+        val sunriseStart = String.format(Locale.US, "%02d:%02d", config.sunriseHour, config.sunriseMinute)
+        val sunrisePlus2 = String.format(Locale.US, "%02d:%02d", (config.sunriseHour + 2).coerceAtMost(23), config.sunriseMinute)
+        val sunrisePlus4 = String.format(Locale.US, "%02d:%02d", (config.sunriseHour + 4).coerceAtMost(23), config.sunriseMinute)
+
+        val sunsetMinus4 = String.format(Locale.US, "%02d:%02d", (config.sunsetHour - 4).coerceAtLeast(0), config.sunsetMinute)
+        val sunsetMinus2 = String.format(Locale.US, "%02d:%02d", (config.sunsetHour - 2).coerceAtLeast(0), config.sunsetMinute)
+        val sunsetEnd = String.format(Locale.US, "%02d:%02d", config.sunsetHour.coerceAtMost(23), config.sunsetMinute)
+
+        val slotsToCreate = listOf(
+            LessonSlotEntity(
+                dateIso = dateIso,
+                startTime = sunriseStart,
+                endTime = sunrisePlus2,
+                title = "Matin Vol (Lever du soleil)",
+                lessonType = "VOL",
+                location = config.location,
+                maxCapacity = config.morningVolCapacity,
+                notes = "Aérologie calme du lever du soleil (+2h)"
+            ),
+            LessonSlotEntity(
+                dateIso = dateIso,
+                startTime = sunrisePlus2,
+                endTime = sunrisePlus4,
+                title = "Matin Gonflage",
+                lessonType = "GONFLAGE",
+                location = config.location,
+                maxCapacity = config.morningGonflageCapacity,
+                notes = "Brise matinale jusqu'à +4h après lever"
+            ),
+            LessonSlotEntity(
+                dateIso = dateIso,
+                startTime = sunsetMinus4,
+                endTime = sunsetMinus2,
+                title = "Soir Gonflage",
+                lessonType = "GONFLAGE",
+                location = config.location,
+                maxCapacity = config.eveningGonflageCapacity,
+                notes = "Gonflage fin d'après-midi (-4h à -2h avant coucher)"
+            ),
+            LessonSlotEntity(
+                dateIso = dateIso,
+                startTime = sunsetMinus2,
+                endTime = sunsetEnd,
+                title = "Soir Vol (Coucher du soleil)",
+                lessonType = "VOL",
+                location = config.location,
+                maxCapacity = config.eveningVolCapacity,
+                notes = "Restitution & vol calme (-2h jusqu'au coucher)"
+            )
+        )
+
+        val createdIds = mutableListOf<Long>()
+        for (slot in slotsToCreate) {
+            val id = planningDao.insertSlot(slot)
+            createdIds.add(id)
+        }
+        return createdIds
+    }
+
+    // --- Student Self-Registration (used in Version Élève) ---
+    suspend fun registerStudentSelf(
+        slotId: Long,
+        firstName: String,
+        lastName: String,
+        phone: String,
+        email: String = "",
+        level: String = "Gonflage"
+    ): Pair<StudentEntity, Boolean> {
+        val cleanPhone = phone.trim()
+        val cleanFirst = firstName.trim()
+        val cleanLast = lastName.trim()
+
+        // 1. Look up student by phone or name
+        var student = if (cleanPhone.isNotBlank()) {
+            planningDao.findStudentByPhone(cleanPhone)
+        } else null
+
+        if (student == null && cleanFirst.isNotBlank() && cleanLast.isNotBlank()) {
+            student = planningDao.findStudentByName(cleanFirst, cleanLast)
+        }
+
+        // 2. If not found, create new student in database
+        if (student == null) {
+            val newStudent = StudentEntity(
+                firstName = cleanFirst.ifBlank { "Élève" },
+                lastName = cleanLast,
+                phone = cleanPhone,
+                email = email.trim(),
+                level = level,
+                notes = "Inscrit via Version Élève"
+            )
+            val newId = planningDao.insertStudent(newStudent)
+            student = newStudent.copy(id = newId)
+        } else {
+            // Update level/phone if needed
+            if (student.level != level || (cleanPhone.isNotBlank() && student.phone != cleanPhone)) {
+                val updated = student.copy(level = level, phone = cleanPhone.ifBlank { student.phone })
+                planningDao.updateStudent(updated)
+                student = updated
+            }
+        }
+
+        // 3. Enroll into slot
+        val enrolled = enrollStudent(slotId, student.id, isWaitingList = false)
+        return Pair(student, enrolled)
+    }
+
+    // Pre-formatted message for student sending their registration to instructor
+    fun generateStudentRegistrationWhatsAppText(
+        student: StudentEntity,
+        slot: LessonSlotEntity,
+        isWaitingList: Boolean = false
+    ): String {
+        val type = PlanningLessonType.fromCode(slot.lessonType)
+        val dateIn = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE)
+        val dateOut = SimpleDateFormat("EEEE d MMMM yyyy", Locale.FRANCE)
+        val formattedDate = try {
+            dateIn.parse(slot.dateIso)?.let { dateOut.format(it).replaceFirstChar { c -> c.uppercase() } } ?: slot.dateIso
+        } catch (e: Exception) {
+            slot.dateIso
+        }
+
+        return if (!isWaitingList) {
+            """
+            🪂 *INSCRIPTION CRÉNEAU PARAMOTEUR* 🪂
+            Bonjour ! Je m'inscris au créneau suivant :
+            
+            📅 *Date* : $formattedDate
+            ⏰ *Horaire* : ${slot.startTime} - ${slot.endTime}
+            ${type.emoji} *Activité* : ${type.label} (${slot.title})
+            📍 *Lieu* : ${slot.location}
+            
+            👤 *Mes Coordonnées :*
+            • Nom : ${student.fullName}
+            • Tél : ${student.phone}
+            • Niveau : ${student.level}
+            
+            Merci de confirmer mon inscription !
+            """.trimIndent()
+        } else {
+            """
+            ⏳ *DEMANDE LISTE D'ATTENTE* ⏳
+            Bonjour ! Le créneau étant complet, je souhaite me placer en liste d'attente :
+            
+            📅 *Date* : $formattedDate (${slot.startTime} - ${slot.endTime})
+            ${type.emoji} *Activité* : ${type.label}
+            👤 *Élève* : ${student.fullName} (${student.phone})
+            """.trimIndent()
         }
     }
 

@@ -72,6 +72,35 @@ data class BookingWithStudent(
     val student: StudentEntity
 )
 
+data class BookingWithSlotInfo(
+    val booking: BookingEntity,
+    val slot: LessonSlotEntity
+)
+
+data class StudentWithStats(
+    val student: StudentEntity,
+    val totalBookings: Int,
+    val attendedBookings: Int,
+    val upcomingBookings: Int,
+    val waitingListBookings: Int,
+    val bookingHistory: List<BookingWithSlotInfo> = emptyList()
+) {
+    val attendanceRate: Float
+        get() = if (totalBookings > 0) (attendedBookings.toFloat() / totalBookings) * 100f else 0f
+}
+
+data class StandardDayConfig(
+    val sunriseHour: Int = 6,
+    val sunriseMinute: Int = 30,
+    val sunsetHour: Int = 21,
+    val sunsetMinute: Int = 0,
+    val morningVolCapacity: Int = 2,
+    val morningGonflageCapacity: Int = 4,
+    val eveningGonflageCapacity: Int = 4,
+    val eveningVolCapacity: Int = 2,
+    val location: String = "Terrain de décollage"
+)
+
 data class SlotWithBookings(
     val slot: LessonSlotEntity,
     val bookings: List<BookingWithStudent> = emptyList()

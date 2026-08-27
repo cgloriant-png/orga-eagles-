@@ -18,6 +18,34 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     // Base data flows
     val allStudents: StateFlow<List<StudentEntity>>
     val slotsWithBookings: StateFlow<List<SlotWithBookings>>
+    val studentsWithStats: StateFlow<List<StudentWithStats>>
+
+    // App Mode: false = Mode Moniteur (Instructeur), true = Version Élève
+    private val prefs = application.getSharedPreferences("paramoteur_planning_prefs", android.content.Context.MODE_PRIVATE)
+
+    private val _isStudentMode = MutableStateFlow(prefs.getBoolean("is_student_mode", false))
+    val isStudentMode: StateFlow<Boolean> = _isStudentMode.asStateFlow()
+
+    // Saved Student Identity for 1-click registration
+    data class StudentProfile(
+        val firstName: String = "",
+        val lastName: String = "",
+        val phone: String = "",
+        val level: String = "Gonflage"
+    ) {
+        val isConfigured: Boolean get() = firstName.isNotBlank() && phone.isNotBlank()
+        val fullName: String get() = "$firstName $lastName".trim()
+    }
+
+    private val _savedProfile = MutableStateFlow(
+        StudentProfile(
+            firstName = prefs.getString("student_first_name", "") ?: "",
+            lastName = prefs.getString("student_last_name", "") ?: "",
+            phone = prefs.getString("student_phone", "") ?: "",
+            level = prefs.getString("student_level", "Gonflage") ?: "Gonflage"
+        )
+    )
+    val savedProfile: StateFlow<StudentProfile> = _savedProfile.asStateFlow()
 
     // Filters for list view
     private val _selectedDateFilter = MutableStateFlow<String?>("TOUS") // "TOUS", "TODAY", "TOMORROW", "WEEK", or "YYYY-MM-DD"
@@ -49,9 +77,34 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
         slotsWithBookings = repository.slotsWithBookings
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+        studentsWithStats = repository.studentsWithStats
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
         viewModelScope.launch {
             repository.initializeSampleDataIfNeeded()
         }
+    }
+
+    fun toggleAppMode() {
+        val newMode = !_isStudentMode.value
+        _isStudentMode.value = newMode
+        prefs.edit().putBoolean("is_student_mode", newMode).apply()
+    }
+
+    fun setAppMode(studentMode: Boolean) {
+        _isStudentMode.value = studentMode
+        prefs.edit().putBoolean("is_student_mode", studentMode).apply()
+    }
+
+    fun saveStudentProfile(firstName: String, lastName: String, phone: String, level: String) {
+        val profile = StudentProfile(firstName.trim(), lastName.trim(), phone.trim(), level)
+        _savedProfile.value = profile
+        prefs.edit()
+            .putString("student_first_name", profile.firstName)
+            .putString("student_last_name", profile.lastName)
+            .putString("student_phone", profile.phone)
+            .putString("student_level", profile.level)
+            .apply()
     }
 
     fun setDateFilter(filter: String?) {
@@ -136,6 +189,68 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
             matchesQuery && matchesLevel
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Filtered students with detailed stats
+    val filteredStudentsWithStats: StateFlow<List<StudentWithStats>> = combine(
+        studentsWithStats,
+        _studentSearchQuery,
+        _studentLevelFilter
+    ) { studentsStats, query, level ->
+        studentsStats.filter { item ->
+            val student = item.student
+            val matchesQuery = query.isBlank() ||
+                    student.fullName.contains(query, ignoreCase = true) ||
+                    student.phone.contains(query)
+
+            val matchesLevel = level == null || student.level.contains(level, ignoreCase = true)
+
+            matchesQuery && matchesLevel
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // --- Standard Day ("Journée Type") Generation ---
+    fun createStandardDay(
+        dateIso: String,
+        config: StandardDayConfig = StandardDayConfig()
+    ) {
+        viewModelScope.launch {
+            val ids = repository.createStandardDaySlots(dateIso, config)
+            _feedbackMessage.emit("Journée Type créée (${ids.size} créneaux Vol & Gonflage) !")
+        }
+    }
+
+    // --- Student Self-Registration (Version Élève) ---
+    fun registerStudentSelf(
+        slotId: Long,
+        firstName: String,
+        lastName: String,
+        phone: String,
+        email: String = "",
+        level: String = "Gonflage",
+        onComplete: (student: StudentEntity, slot: LessonSlotEntity, shareText: String) -> Unit
+    ) {
+        viewModelScope.launch {
+            // Save profile locally for future 1-click use
+            saveStudentProfile(firstName, lastName, phone, level)
+
+            val (student, _) = repository.registerStudentSelf(
+                slotId = slotId,
+                firstName = firstName,
+                lastName = lastName,
+                phone = phone,
+                email = email,
+                level = level
+            )
+
+            // Find slot details
+            val slot = slotsWithBookings.value.find { it.slot.id == slotId }?.slot
+                ?: LessonSlotEntity(id = slotId, dateIso = "", startTime = "", endTime = "", title = "Créneau", lessonType = "GONFLAGE")
+
+            val shareText = repository.generateStudentRegistrationWhatsAppText(student, slot, isWaitingList = false)
+            _feedbackMessage.emit("Inscription enregistrée ! Ouverture de WhatsApp...")
+            onComplete(student, slot, shareText)
+        }
+    }
 
     // --- Slot Operations ---
     fun createSlot(

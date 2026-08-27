@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -27,6 +28,9 @@ import com.example.data.model.*
 import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.PlanningViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -48,7 +52,9 @@ class MainActivity : ComponentActivity() {
                 val allStudents by viewModel.allStudents.collectAsStateWithLifecycle()
                 val slotsWithBookings by viewModel.slotsWithBookings.collectAsStateWithLifecycle()
                 val filteredSlots by viewModel.filteredSlots.collectAsStateWithLifecycle()
-                val filteredStudents by viewModel.filteredStudents.collectAsStateWithLifecycle()
+                val filteredStudentsWithStats by viewModel.filteredStudentsWithStats.collectAsStateWithLifecycle()
+                val isStudentMode by viewModel.isStudentMode.collectAsStateWithLifecycle()
+                val savedProfile by viewModel.savedProfile.collectAsStateWithLifecycle()
 
                 // Filter States
                 val selectedDateFilter by viewModel.selectedDateFilter.collectAsStateWithLifecycle()
@@ -59,14 +65,16 @@ class MainActivity : ComponentActivity() {
 
                 // Dialog & Sheet States
                 var showAddSlotDialog by remember { mutableStateOf(false) }
-                var initialDateForSlotDialog by remember { mutableStateOf("2026-08-27") }
+                var showStandardDayDialog by remember { mutableStateOf(false) }
+                var dateForStandardDay by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
+                var initialDateForSlotDialog by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
                 var slotToEdit by remember { mutableStateOf<LessonSlotEntity?>(null) }
                 var showAddStudentDialog by remember { mutableStateOf(false) }
                 var studentToEdit by remember { mutableStateOf<StudentEntity?>(null) }
                 var slotToEnrollStudent by remember { mutableStateOf<SlotWithBookings?>(null) }
                 var selectedDayForDetail by remember { mutableStateOf<String?>(null) }
 
-                // Navigation Bar Tab: 0 = Calendrier Visuel (Annuel/Trimestre/Mois), 1 = Liste Créneaux, 2 = Participants
+                // Navigation Bar Tab: 0 = Calendrier Visuel, 1 = Liste Créneaux, 2 = Élèves & Stats
                 var currentTab by remember { mutableIntStateOf(0) }
 
                 // Snackbar Host State
@@ -89,13 +97,12 @@ class MainActivity : ComponentActivity() {
                     try {
                         context.startActivity(sendIntent)
                     } catch (e: Exception) {
-                        // Fallback generic share chooser if WhatsApp is not directly targeting
                         val chooser = Intent.createChooser(
                             Intent(Intent.ACTION_SEND).apply {
                                 putExtra(Intent.EXTRA_TEXT, text)
                                 type = "text/plain"
                             },
-                            "Partager le planning"
+                            "Partager via"
                         )
                         try {
                             context.startActivity(chooser)
@@ -105,223 +112,278 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    contentWindowInsets = WindowInsets.safeDrawing,
-                    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-                    topBar = {
-                        Surface(
-                            color = HighDensityHeaderTitle,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                // If in Student Mode (Version Élève)
+                if (isStudentMode) {
+                    StudentPortalScreen(
+                        slots = slotsWithBookings,
+                        savedProfile = savedProfile,
+                        onSaveProfile = { first, last, phone, level ->
+                            viewModel.saveStudentProfile(first, last, phone, level)
+                        },
+                        onRegisterSelf = { slotId, firstName, lastName, phone, email, level, onComplete ->
+                            viewModel.registerStudentSelf(slotId, firstName, lastName, phone, email, level, onComplete)
+                        },
+                        onUnenroll = { slotId, studentId ->
+                            viewModel.unenrollStudent(slotId, studentId)
+                        },
+                        allStudents = allStudents,
+                        onSwitchToInstructorMode = {
+                            viewModel.setAppMode(false)
+                        }
+                    )
+                } else {
+                    // Instructor Mode
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        contentWindowInsets = WindowInsets.safeDrawing,
+                        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                        topBar = {
+                            Surface(
+                                color = HighDensityHeaderTitle,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("🪂", fontSize = 20.sp)
-                                    Column {
-                                        Text(
-                                            "Planning & Créneaux",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp,
-                                            color = Color.White
-                                        )
-                                        Text(
-                                            "Gonflage • Vol • Perf",
-                                            fontSize = 11.sp,
-                                            color = Color.White.copy(alpha = 0.75f)
-                                        )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text("🪂", fontSize = 20.sp)
+                                        Column {
+                                            Text(
+                                                "Planning & Élèves",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = Color.White
+                                            )
+                                            Text(
+                                                "Gonflage • Vol • Perf",
+                                                fontSize = 11.sp,
+                                                color = Color.White.copy(alpha = 0.75f)
+                                            )
+                                        }
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        // Quick Student Mode Switch Button
+                                        OutlinedButton(
+                                            onClick = { viewModel.setAppMode(true) },
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(34.dp)
+                                        ) {
+                                            Text("👁️ Version Élève", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        // WhatsApp share planning button
+                                        Button(
+                                            onClick = { openWhatsAppDirect(viewModel.getWhatsAppText()) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(34.dp)
+                                        ) {
+                                            Text("💬", fontSize = 13.sp)
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("WhatsApp", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
-
-                                Button(
-                                    onClick = { openWhatsAppDirect(viewModel.getWhatsAppText()) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess),
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                    modifier = Modifier.height(34.dp)
-                                ) {
-                                    Text("💬", fontSize = 13.sp)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("WhatsApp", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
                             }
-                        }
-                    },
-                    bottomBar = {
-                        NavigationBar(
-                            containerColor = HighDensitySurface,
-                            tonalElevation = 6.dp,
-                            modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
-                        ) {
-                            NavigationBarItem(
-                                selected = currentTab == 0,
-                                onClick = { currentTab = 0 },
-                                icon = {
-                                    Icon(
-                                        if (currentTab == 0) Icons.Default.CalendarMonth else Icons.Outlined.CalendarMonth,
-                                        contentDescription = "Planning Visuel"
+                        },
+                        bottomBar = {
+                            NavigationBar(
+                                containerColor = HighDensitySurface,
+                                tonalElevation = 6.dp,
+                                modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                            ) {
+                                NavigationBarItem(
+                                    selected = currentTab == 0,
+                                    onClick = { currentTab = 0 },
+                                    icon = {
+                                        Icon(
+                                            if (currentTab == 0) Icons.Default.CalendarMonth else Icons.Outlined.CalendarMonth,
+                                            contentDescription = "Planning Visuel"
+                                        )
+                                    },
+                                    label = { Text("Visuel", fontWeight = if (currentTab == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = PrimaryBlue,
+                                        selectedTextColor = PrimaryBlue,
+                                        indicatorColor = PrimaryBlueContainer
                                     )
-                                },
-                                label = { Text("Visuel", fontWeight = if (currentTab == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = PrimaryBlue,
-                                    selectedTextColor = PrimaryBlue,
-                                    indicatorColor = PrimaryBlueContainer
                                 )
-                            )
 
-                            NavigationBarItem(
-                                selected = currentTab == 1,
-                                onClick = { currentTab = 1 },
-                                icon = {
-                                    Icon(
-                                        if (currentTab == 1) Icons.Default.FormatListBulleted else Icons.Outlined.FormatListBulleted,
-                                        contentDescription = "Liste Créneaux"
+                                NavigationBarItem(
+                                    selected = currentTab == 1,
+                                    onClick = { currentTab = 1 },
+                                    icon = {
+                                        Icon(
+                                            if (currentTab == 1) Icons.Default.FormatListBulleted else Icons.Outlined.FormatListBulleted,
+                                            contentDescription = "Liste Créneaux"
+                                        )
+                                    },
+                                    label = { Text("Créneaux", fontWeight = if (currentTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = PrimaryBlue,
+                                        selectedTextColor = PrimaryBlue,
+                                        indicatorColor = PrimaryBlueContainer
                                     )
-                                },
-                                label = { Text("Créneaux", fontWeight = if (currentTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = PrimaryBlue,
-                                    selectedTextColor = PrimaryBlue,
-                                    indicatorColor = PrimaryBlueContainer
                                 )
-                            )
 
-                            NavigationBarItem(
-                                selected = currentTab == 2,
-                                onClick = { currentTab = 2 },
-                                icon = {
-                                    BadgedBox(
-                                        badge = {
-                                            if (allStudents.isNotEmpty()) {
-                                                Badge { Text("${allStudents.size}") }
+                                NavigationBarItem(
+                                    selected = currentTab == 2,
+                                    onClick = { currentTab = 2 },
+                                    icon = {
+                                        BadgedBox(
+                                            badge = {
+                                                if (allStudents.isNotEmpty()) {
+                                                    Badge { Text("${allStudents.size}") }
+                                                }
+                                            }
+                                        ) {
+                                            Icon(
+                                                if (currentTab == 2) Icons.Default.People else Icons.Outlined.People,
+                                                contentDescription = "Élèves & Stats"
+                                            )
+                                        }
+                                    },
+                                    label = { Text("Élèves & Stats", fontWeight = if (currentTab == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = PrimaryBlue,
+                                        selectedTextColor = PrimaryBlue,
+                                        indicatorColor = PrimaryBlueContainer
+                                    )
+                                )
+                            }
+                        },
+                        floatingActionButton = {
+                            when (currentTab) {
+                                0, 1 -> {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        // ⚡ Quick Standard Day FAB
+                                        FloatingActionButton(
+                                            onClick = {
+                                                dateForStandardDay = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())
+                                                showStandardDayDialog = true
+                                            },
+                                            containerColor = Color(0xFFD97706),
+                                            contentColor = Color.White
+                                        ) {
+                                            Row(modifier = Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Journée Type", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                             }
                                         }
-                                    ) {
-                                        Icon(
-                                            if (currentTab == 2) Icons.Default.People else Icons.Outlined.People,
-                                            contentDescription = "Participants"
-                                        )
+
+                                        // New Single Slot FAB
+                                        FloatingActionButton(
+                                            onClick = {
+                                                slotToEdit = null
+                                                initialDateForSlotDialog = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())
+                                                showAddSlotDialog = true
+                                            },
+                                            containerColor = PrimaryBlue,
+                                            contentColor = Color.White
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = "Nouveau Créneau")
+                                        }
                                     }
-                                },
-                                label = { Text("Participants", fontWeight = if (currentTab == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = PrimaryBlue,
-                                    selectedTextColor = PrimaryBlue,
-                                    indicatorColor = PrimaryBlueContainer
+                                }
+                                2 -> {
+                                    FloatingActionButton(
+                                        onClick = {
+                                            studentToEdit = null
+                                            showAddStudentDialog = true
+                                        },
+                                        containerColor = PrimaryBlue,
+                                        contentColor = Color.White
+                                    ) {
+                                        Icon(Icons.Default.PersonAdd, contentDescription = "Ajouter un élève")
+                                    }
+                                }
+                            }
+                        }
+                    ) { innerPadding ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                        ) {
+                            when (currentTab) {
+                                0 -> VisualCalendarPlanningScreen(
+                                    slots = slotsWithBookings,
+                                    onSelectDay = { dateIso ->
+                                        selectedDayForDetail = dateIso
+                                    },
+                                    onOpenAddSlotForDate = { dateIso ->
+                                        slotToEdit = null
+                                        initialDateForSlotDialog = dateIso
+                                        showAddSlotDialog = true
+                                    },
+                                    onOpenWhatsAppShare = {
+                                        openWhatsAppDirect(viewModel.getWhatsAppText())
+                                    }
                                 )
-                            )
-                        }
-                    },
-                    floatingActionButton = {
-                        if (currentTab != 2) {
-                            ExtendedFloatingActionButton(
-                                onClick = {
-                                    slotToEdit = null
-                                    initialDateForSlotDialog = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.FRANCE).format(java.util.Date())
-                                    showAddSlotDialog = true
-                                },
-                                containerColor = PrimaryBlue,
-                                contentColor = Color.White,
-                                elevation = FloatingActionButtonDefaults.elevation(6.dp)
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Nouveau Créneau", fontWeight = FontWeight.Bold)
-                            }
-                        } else {
-                            FloatingActionButton(
-                                onClick = {
-                                    studentToEdit = null
-                                    showAddStudentDialog = true
-                                },
-                                containerColor = PrimaryBlue,
-                                contentColor = Color.White
-                            ) {
-                                Icon(Icons.Default.PersonAdd, contentDescription = "Ajouter un participant")
-                            }
-                        }
-                    }
-                ) { innerPadding ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding)
-                    ) {
-                        when (currentTab) {
-                            0 -> VisualCalendarPlanningScreen(
-                                slots = slotsWithBookings,
-                                onSelectDay = { dateIso ->
-                                    selectedDayForDetail = dateIso
-                                },
-                                onOpenAddSlotForDate = { dateIso ->
-                                    slotToEdit = null
-                                    initialDateForSlotDialog = dateIso
-                                    showAddSlotDialog = true
-                                },
-                                onOpenWhatsAppShare = {
-                                    openWhatsAppDirect(viewModel.getWhatsAppText())
-                                }
-                            )
 
-                            1 -> PlanningScreen(
-                                slots = filteredSlots,
-                                selectedDateFilter = selectedDateFilter,
-                                onDateFilterChange = { df -> viewModel.setDateFilter(df) },
-                                selectedTypeFilter = filterLessonType,
-                                onTypeFilterChange = { tf -> viewModel.setLessonTypeFilter(tf) },
-                                onlyAvailable = filterOnlyAvailable,
-                                onToggleOnlyAvailable = { viewModel.toggleFilterOnlyAvailable() },
-                                onOpenAddSlot = {
-                                    slotToEdit = null
-                                    initialDateForSlotDialog = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.FRANCE).format(java.util.Date())
-                                    showAddSlotDialog = true
-                                },
-                                onOpenEnrollStudent = { slotItem ->
-                                    slotToEnrollStudent = slotItem
-                                },
-                                onUnenrollStudent = { slotId, studentId ->
-                                    viewModel.unenrollStudent(slotId, studentId)
-                                },
-                                onToggleAttendance = { bookingId, studentId, attended ->
-                                    viewModel.toggleAttendance(bookingId, studentId, attended)
-                                },
-                                onEditSlot = { slot ->
-                                    slotToEdit = slot
-                                    initialDateForSlotDialog = slot.dateIso
-                                    showAddSlotDialog = true
-                                },
-                                onDeleteSlot = { slotId ->
-                                    viewModel.deleteSlot(slotId)
-                                }
-                            )
+                                1 -> PlanningScreen(
+                                    slots = filteredSlots,
+                                    selectedDateFilter = selectedDateFilter,
+                                    onDateFilterChange = { df -> viewModel.setDateFilter(df) },
+                                    selectedTypeFilter = filterLessonType,
+                                    onTypeFilterChange = { tf -> viewModel.setLessonTypeFilter(tf) },
+                                    onlyAvailable = filterOnlyAvailable,
+                                    onToggleOnlyAvailable = { viewModel.toggleFilterOnlyAvailable() },
+                                    onOpenAddSlot = {
+                                        slotToEdit = null
+                                        initialDateForSlotDialog = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())
+                                        showAddSlotDialog = true
+                                    },
+                                    onOpenEnrollStudent = { slotItem ->
+                                        slotToEnrollStudent = slotItem
+                                    },
+                                    onUnenrollStudent = { slotId, studentId ->
+                                        viewModel.unenrollStudent(slotId, studentId)
+                                    },
+                                    onToggleAttendance = { bookingId, studentId, attended ->
+                                        viewModel.toggleAttendance(bookingId, studentId, attended)
+                                    },
+                                    onEditSlot = { slot ->
+                                        slotToEdit = slot
+                                        initialDateForSlotDialog = slot.dateIso
+                                        showAddSlotDialog = true
+                                    },
+                                    onDeleteSlot = { slotId ->
+                                        viewModel.deleteSlot(slotId)
+                                    }
+                                )
 
-                            2 -> StudentsScreen(
-                                students = filteredStudents,
-                                searchQuery = studentSearchQuery,
-                                onSearchQueryChange = { q -> viewModel.setStudentSearchQuery(q) },
-                                selectedLevelFilter = studentLevelFilter,
-                                onLevelFilterChange = { l -> viewModel.setStudentLevelFilter(l) },
-                                onOpenAddStudent = {
-                                    studentToEdit = null
-                                    showAddStudentDialog = true
-                                },
-                                onEditStudent = { s ->
-                                    studentToEdit = s
-                                    showAddStudentDialog = true
-                                },
-                                onDeleteStudent = { s ->
-                                    viewModel.deleteStudent(s)
-                                }
-                            )
+                                2 -> StudentsScreen(
+                                    studentsStats = filteredStudentsWithStats,
+                                    searchQuery = studentSearchQuery,
+                                    onSearchQueryChange = { q -> viewModel.setStudentSearchQuery(q) },
+                                    selectedLevelFilter = studentLevelFilter,
+                                    onLevelFilterChange = { l -> viewModel.setStudentLevelFilter(l) },
+                                    onOpenAddStudent = {
+                                        studentToEdit = null
+                                        showAddStudentDialog = true
+                                    },
+                                    onEditStudent = { s ->
+                                        studentToEdit = s
+                                        showAddStudentDialog = true
+                                    },
+                                    onDeleteStudent = { s ->
+                                        viewModel.deleteStudent(s)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -337,6 +399,10 @@ class MainActivity : ComponentActivity() {
                             slotToEdit = null
                             initialDateForSlotDialog = dateIso
                             showAddSlotDialog = true
+                        },
+                        onOpenCreateStandardDay = {
+                            dateForStandardDay = dateIso
+                            showStandardDayDialog = true
                         },
                         onOpenEnrollStudent = { slotItem ->
                             slotToEnrollStudent = slotItem
@@ -358,7 +424,19 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Dialog: Add / Edit Slot
+                // Dialog: Standard Day Generation
+                if (showStandardDayDialog) {
+                    StandardDayDialog(
+                        initialDateIso = dateForStandardDay,
+                        onDismiss = { showStandardDayDialog = false },
+                        onConfirm = { dateIso, config ->
+                            viewModel.createStandardDay(dateIso, config)
+                            showStandardDayDialog = false
+                        }
+                    )
+                }
+
+                // Dialog: Add / Edit Single Slot
                 if (showAddSlotDialog) {
                     AddOrEditSlotDialog(
                         initialDate = initialDateForSlotDialog,

@@ -29,6 +29,7 @@ fun DayDetailSheet(
     slots: List<SlotWithBookings>,
     onDismiss: () -> Unit,
     onOpenAddSlot: () -> Unit,
+    onOpenCreateStandardDay: () -> Unit,
     onOpenEnrollStudent: (SlotWithBookings) -> Unit,
     onUnenrollStudent: (Long, Long) -> Unit,
     onToggleAttendance: (Long, Long, Boolean) -> Unit,
@@ -61,7 +62,7 @@ fun DayDetailSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -80,7 +81,7 @@ fun DayDetailSheet(
                         Text(
                             text = formattedDate,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
+                            fontSize = 16.sp,
                             color = HighDensityHeaderTitle
                         )
                     }
@@ -91,21 +92,32 @@ fun DayDetailSheet(
                             DayColorStatus.RED_FULL -> "🔴 Tous les créneaux sont complets"
                             DayColorStatus.WHITE_NO_SLOT -> "⚪ Aucun créneau proposé pour cette date"
                         },
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         color = SecondaryText
                     )
                 }
 
-                Button(
-                    onClick = onOpenAddSlot,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    modifier = Modifier.height(34.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Ajouter", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = onOpenCreateStandardDay,
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Text("⚡ Journée Type", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = onOpenAddSlot,
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Créneau", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 

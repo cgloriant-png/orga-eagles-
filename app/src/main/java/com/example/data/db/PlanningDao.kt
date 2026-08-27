@@ -19,6 +19,12 @@ interface PlanningDao {
     @Query("SELECT COUNT(*) FROM students")
     suspend fun getStudentsCount(): Int
 
+    @Query("SELECT * FROM students WHERE phone = :phone LIMIT 1")
+    suspend fun findStudentByPhone(phone: String): StudentEntity?
+
+    @Query("SELECT * FROM students WHERE LOWER(firstName) = LOWER(:firstName) AND LOWER(lastName) = LOWER(:lastName) LIMIT 1")
+    suspend fun findStudentByName(firstName: String, lastName: String): StudentEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStudent(student: StudentEntity): Long
 
