@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.StandardDayConfig
@@ -23,22 +25,27 @@ import java.util.Locale
 @Composable
 fun StandardDayDialog(
     initialDateIso: String,
+    initialConfig: StandardDayConfig = StandardDayConfig(),
     onDismiss: () -> Unit,
-    onConfirm: (dateIso: String, config: StandardDayConfig) -> Unit
+    onConfirm: (dateIso: String, config: StandardDayConfig, saveAsDefault: Boolean) -> Unit
 ) {
     var dateIso by remember { mutableStateOf(initialDateIso) }
 
     // Sunrise / Sunset hours
-    var sunriseHour by remember { mutableIntStateOf(6) }
-    var sunriseMinute by remember { mutableIntStateOf(30) }
-    var sunsetHour by remember { mutableIntStateOf(21) }
-    var sunsetMinute by remember { mutableIntStateOf(0) }
+    var sunriseHour by remember { mutableIntStateOf(initialConfig.sunriseHour) }
+    var sunriseMinute by remember { mutableIntStateOf(initialConfig.sunriseMinute) }
+    var sunsetHour by remember { mutableIntStateOf(initialConfig.sunsetHour) }
+    var sunsetMinute by remember { mutableIntStateOf(initialConfig.sunsetMinute) }
 
-    var location by remember { mutableStateOf("Terrain de décollage") }
-    var morningVolCap by remember { mutableIntStateOf(2) }
-    var morningGonflageCap by remember { mutableIntStateOf(4) }
-    var eveningGonflageCap by remember { mutableIntStateOf(4) }
-    var eveningVolCap by remember { mutableIntStateOf(2) }
+    var location by remember { mutableStateOf(initialConfig.location) }
+
+    // Customizable capacities (User can modify Vol & Gonflage slots)
+    var morningVolCap by remember { mutableIntStateOf(initialConfig.morningVolCapacity) }
+    var morningGonflageCap by remember { mutableIntStateOf(initialConfig.morningGonflageCapacity) }
+    var eveningGonflageCap by remember { mutableIntStateOf(initialConfig.eveningGonflageCapacity) }
+    var eveningVolCap by remember { mutableIntStateOf(initialConfig.eveningVolCapacity) }
+
+    var saveAsDefault by remember { mutableStateOf(false) }
 
     // Calculated slot preview strings
     val sunriseStartStr = String.format(Locale.US, "%02d:%02d", sunriseHour, sunriseMinute)
@@ -59,7 +66,7 @@ fun StandardDayDialog(
                 Text("⚡", fontSize = 22.sp)
                 Column {
                     Text("Créer une Journée Type", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("Génération automatique des 4 créneaux", fontSize = 11.sp, color = SecondaryText)
+                    Text("Génération automatique & Paramètres des 4 créneaux", fontSize = 11.sp, color = SecondaryText)
                 }
             }
         },
@@ -157,48 +164,72 @@ fun StandardDayDialog(
 
                 Divider(color = BorderOutline.copy(alpha = 0.5f))
 
-                // Preview of the 4 slots
-                Text("Aperçu des 4 créneaux générés :", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
-
-                // 1. Matin Vol
-                SlotPreviewItem(
-                    emoji = "✈️",
-                    type = "VOL",
-                    hours = "$sunriseStartStr - $sunrisePlus2Str",
-                    description = "Lever du soleil à +2h",
-                    capacity = morningVolCap,
-                    badgeColor = Color(0xFFDCFCE7)
+                // Custom Capacities Section
+                Text(
+                    text = "Capacité des créneaux (Nombre de places) :",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = HighDensityHeaderTitle
                 )
 
-                // 2. Matin Gonflage
-                SlotPreviewItem(
-                    emoji = "🪂",
-                    type = "GONFLAGE",
-                    hours = "$sunrisePlus2Str - $sunrisePlus4Str",
-                    description = "+2h à +4h après lever",
-                    capacity = morningGonflageCap,
-                    badgeColor = Color(0xFFE0F2FE)
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(HighDensityBg, RoundedCornerShape(10.dp))
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    CapacityStepperRow(
+                        emoji = "✈️",
+                        title = "1. Matin Vol",
+                        hours = "$sunriseStartStr - $sunrisePlus2Str",
+                        value = morningVolCap,
+                        onValueChange = { morningVolCap = it.coerceIn(1, 20) }
+                    )
 
-                // 3. Soir Gonflage
-                SlotPreviewItem(
-                    emoji = "🪂",
-                    type = "GONFLAGE",
-                    hours = "$sunsetMinus4Str - $sunsetMinus2Str",
-                    description = "-4h à -2h avant coucher",
-                    capacity = eveningGonflageCap,
-                    badgeColor = Color(0xFFE0F2FE)
-                )
+                    CapacityStepperRow(
+                        emoji = "🪂",
+                        title = "2. Matin Gonflage",
+                        hours = "$sunrisePlus2Str - $sunrisePlus4Str",
+                        value = morningGonflageCap,
+                        onValueChange = { morningGonflageCap = it.coerceIn(1, 20) }
+                    )
 
-                // 4. Soir Vol
-                SlotPreviewItem(
-                    emoji = "✈️",
-                    type = "VOL",
-                    hours = "$sunsetMinus2Str - $sunsetEndStr",
-                    description = "-2h jusqu'au coucher du soleil",
-                    capacity = eveningVolCap,
-                    badgeColor = Color(0xFFDCFCE7)
-                )
+                    CapacityStepperRow(
+                        emoji = "🪂",
+                        title = "3. Soir Gonflage",
+                        hours = "$sunsetMinus4Str - $sunsetMinus2Str",
+                        value = eveningGonflageCap,
+                        onValueChange = { eveningGonflageCap = it.coerceIn(1, 20) }
+                    )
+
+                    CapacityStepperRow(
+                        emoji = "✈️",
+                        title = "4. Soir Vol",
+                        hours = "$sunsetMinus2Str - $sunsetEndStr",
+                        value = eveningVolCap,
+                        onValueChange = { eveningVolCap = it.coerceIn(1, 20) }
+                    )
+                }
+
+                // Option to save these settings as default
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { saveAsDefault = !saveAsDefault },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = saveAsDefault,
+                        onCheckedChange = { saveAsDefault = it }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        "Enregistrer ces capacités comme configuration par défaut",
+                        fontSize = 11.sp,
+                        color = HighDensityHeaderTitle
+                    )
+                }
             }
         },
         confirmButton = {
@@ -215,7 +246,7 @@ fun StandardDayDialog(
                         eveningVolCapacity = eveningVolCap,
                         location = location.ifBlank { "Terrain de décollage" }
                     )
-                    onConfirm(dateIso, config)
+                    onConfirm(dateIso, config, saveAsDefault)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                 shape = RoundedCornerShape(10.dp)
@@ -236,45 +267,70 @@ fun StandardDayDialog(
 }
 
 @Composable
-private fun SlotPreviewItem(
+private fun CapacityStepperRow(
     emoji: String,
-    type: String,
+    title: String,
     hours: String,
-    description: String,
-    capacity: Int,
-    badgeColor: Color
+    value: Int,
+    onValueChange: (Int) -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = HighDensityBg),
-        border = BorderStroke(1.dp, BorderOutline.copy(alpha = 0.4f)),
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(HighDensitySurface, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.weight(1f)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Text(emoji, fontSize = 14.sp)
+            Column {
+                Text(title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = HighDensityHeaderTitle)
+                Text(hours, fontSize = 10.sp, color = SecondaryText)
+            }
+        }
+
+        // Stepper: [-] [ 4 places ] [+]
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            FilledIconButton(
+                onClick = { onValueChange(value - 1) },
+                enabled = value > 1,
+                modifier = Modifier.size(28.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = HighDensityNavBar)
             ) {
-                Text(emoji, fontSize = 14.sp)
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(hours, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = HighDensityHeaderTitle)
-                        Surface(shape = RoundedCornerShape(4.dp), color = badgeColor) {
-                            Text(type, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
-                        }
-                    }
-                    Text(description, fontSize = 10.sp, color = SecondaryText)
-                }
+                Text("-", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
             }
 
-            Surface(shape = RoundedCornerShape(6.dp), color = HighDensitySurface) {
-                Text("$capacity places", fontSize = 10.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = HighDensityBg,
+                border = BorderStroke(1.dp, BorderOutline.copy(alpha = 0.5f)),
+                modifier = Modifier.widthIn(min = 60.dp)
+            ) {
+                Text(
+                    text = "$value place${if (value > 1) "s" else ""}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    color = PrimaryBlue,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                )
+            }
+
+            FilledIconButton(
+                onClick = { onValueChange(value + 1) },
+                enabled = value < 20,
+                modifier = Modifier.size(28.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = HighDensityNavBar)
+            ) {
+                Text("+", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
             }
         }
     }

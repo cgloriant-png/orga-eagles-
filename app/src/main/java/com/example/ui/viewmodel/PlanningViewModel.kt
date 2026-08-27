@@ -26,6 +26,26 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     private val _isStudentMode = MutableStateFlow(prefs.getBoolean("is_student_mode", false))
     val isStudentMode: StateFlow<Boolean> = _isStudentMode.asStateFlow()
 
+    // Instructor PIN (defaults to "1234")
+    private val _instructorPin = MutableStateFlow(prefs.getString("instructor_pin", "1234") ?: "1234")
+    val instructorPin: StateFlow<String> = _instructorPin.asStateFlow()
+
+    // Saved Default Standard Day Config
+    private val _savedStandardDayConfig = MutableStateFlow(
+        StandardDayConfig(
+            sunriseHour = prefs.getInt("std_sun_rise_h", 6),
+            sunriseMinute = prefs.getInt("std_sun_rise_m", 30),
+            sunsetHour = prefs.getInt("std_sun_set_h", 21),
+            sunsetMinute = prefs.getInt("std_sun_set_m", 0),
+            morningVolCapacity = prefs.getInt("std_morn_vol", 2),
+            morningGonflageCapacity = prefs.getInt("std_morn_gonf", 4),
+            eveningGonflageCapacity = prefs.getInt("std_eve_gonf", 4),
+            eveningVolCapacity = prefs.getInt("std_eve_vol", 2),
+            location = prefs.getString("std_location", "Terrain de décollage") ?: "Terrain de décollage"
+        )
+    )
+    val savedStandardDayConfig: StateFlow<StandardDayConfig> = _savedStandardDayConfig.asStateFlow()
+
     // Saved Student Identity for 1-click registration
     data class StudentProfile(
         val firstName: String = "",
@@ -94,6 +114,36 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     fun setAppMode(studentMode: Boolean) {
         _isStudentMode.value = studentMode
         prefs.edit().putBoolean("is_student_mode", studentMode).apply()
+    }
+
+    fun setInstructorPin(newPin: String) {
+        val pin = newPin.trim()
+        if (pin.length >= 4) {
+            _instructorPin.value = pin
+            prefs.edit().putString("instructor_pin", pin).apply()
+            viewModelScope.launch {
+                _feedbackMessage.emit("Code PIN Moniteur mis à jour ($pin)")
+            }
+        }
+    }
+
+    fun verifyInstructorPin(enteredPin: String): Boolean {
+        return enteredPin.trim() == _instructorPin.value.trim()
+    }
+
+    fun saveDefaultStandardDayConfig(config: StandardDayConfig) {
+        _savedStandardDayConfig.value = config
+        prefs.edit()
+            .putInt("std_sun_rise_h", config.sunriseHour)
+            .putInt("std_sun_rise_m", config.sunriseMinute)
+            .putInt("std_sun_set_h", config.sunsetHour)
+            .putInt("std_sun_set_m", config.sunsetMinute)
+            .putInt("std_morn_vol", config.morningVolCapacity)
+            .putInt("std_morn_gonf", config.morningGonflageCapacity)
+            .putInt("std_eve_gonf", config.eveningGonflageCapacity)
+            .putInt("std_eve_vol", config.eveningVolCapacity)
+            .putString("std_location", config.location)
+            .apply()
     }
 
     fun saveStudentProfile(firstName: String, lastName: String, phone: String, level: String) {

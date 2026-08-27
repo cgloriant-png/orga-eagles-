@@ -11,6 +11,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,6 +57,8 @@ class MainActivity : ComponentActivity() {
                 val filteredStudentsWithStats by viewModel.filteredStudentsWithStats.collectAsStateWithLifecycle()
                 val isStudentMode by viewModel.isStudentMode.collectAsStateWithLifecycle()
                 val savedProfile by viewModel.savedProfile.collectAsStateWithLifecycle()
+                val instructorPin by viewModel.instructorPin.collectAsStateWithLifecycle()
+                val savedStandardDayConfig by viewModel.savedStandardDayConfig.collectAsStateWithLifecycle()
 
                 // Filter States
                 val selectedDateFilter by viewModel.selectedDateFilter.collectAsStateWithLifecycle()
@@ -66,6 +70,7 @@ class MainActivity : ComponentActivity() {
                 // Dialog & Sheet States
                 var showAddSlotDialog by remember { mutableStateOf(false) }
                 var showStandardDayDialog by remember { mutableStateOf(false) }
+                var showPinSettingsDialog by remember { mutableStateOf(false) }
                 var dateForStandardDay by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
                 var initialDateForSlotDialog by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
                 var slotToEdit by remember { mutableStateOf<LessonSlotEntity?>(null) }
@@ -127,6 +132,9 @@ class MainActivity : ComponentActivity() {
                             viewModel.unenrollStudent(slotId, studentId)
                         },
                         allStudents = allStudents,
+                        onVerifyPin = { pin ->
+                            viewModel.verifyInstructorPin(pin)
+                        },
                         onSwitchToInstructorMode = {
                             viewModel.setAppMode(false)
                         }
@@ -170,7 +178,15 @@ class MainActivity : ComponentActivity() {
                                     }
 
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        // Quick Student Mode Switch Button
+                                        // Security / PIN Settings button
+                                        IconButton(
+                                            onClick = { showPinSettingsDialog = true },
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Icon(Icons.Default.Security, contentDescription = "Sécurité & PIN", tint = Color.White)
+                                        }
+
+                                        // Switch to Student Mode button (Lock for students)
                                         OutlinedButton(
                                             onClick = { viewModel.setAppMode(true) },
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
@@ -388,7 +404,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Modal Detail Sheet when user taps a calendar day
+                // Modal Detail Sheet when user taps a calendar day (Instructor view)
                 selectedDayForDetail?.let { dateIso ->
                     val daySlots = slotsWithBookings.filter { it.slot.dateIso == dateIso }
                     DayDetailSheet(
@@ -424,15 +440,87 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Dialog: Standard Day Generation
+                // Dialog: Standard Day Generation & Capacity Configuration
                 if (showStandardDayDialog) {
                     StandardDayDialog(
                         initialDateIso = dateForStandardDay,
+                        initialConfig = savedStandardDayConfig,
                         onDismiss = { showStandardDayDialog = false },
-                        onConfirm = { dateIso, config ->
+                        onConfirm = { dateIso, config, saveAsDefault ->
                             viewModel.createStandardDay(dateIso, config)
+                            if (saveAsDefault) {
+                                viewModel.saveDefaultStandardDayConfig(config)
+                            }
                             showStandardDayDialog = false
                         }
+                    )
+                }
+
+                // Dialog: Instructor PIN & Student Sharing Settings
+                if (showPinSettingsDialog) {
+                    var newPin by remember { mutableStateOf(instructorPin) }
+
+                    AlertDialog(
+                        onDismissRequest = { showPinSettingsDialog = false },
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("🔒", fontSize = 22.sp)
+                                Text("Protection Mode Moniteur", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            }
+                        },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(
+                                    "Pour envoyer l'application à vos élèves en toute sécurité sans qu'ils puissent modifier vos créneaux ou voir les coordonnées des autres élèves, l'accès Moniteur est verrouillé par un code PIN.",
+                                    fontSize = 12.sp,
+                                    color = SecondaryText
+                                )
+
+                                OutlinedTextField(
+                                    value = newPin,
+                                    onValueChange = { if (it.length <= 6) newPin = it },
+                                    label = { Text("Code PIN Moniteur (4 à 6 chiffres)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = GreenSuccessBg,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("✅ Mode Élève Sécurisé :", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = GreenSuccess)
+                                        Text("• Visuel Mois / Trimestre / Année interactif\n• Inscription en 1 clic\n• Données personnelles protégées", fontSize = 10.sp, color = HighDensityHeaderTitle)
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    if (newPin.length >= 4) {
+                                        viewModel.setInstructorPin(newPin)
+                                        showPinSettingsDialog = false
+                                    } else {
+                                        Toast.makeText(context, "Le code PIN doit comporter au moins 4 chiffres", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Enregistrer le PIN", fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showPinSettingsDialog = false }) {
+                                Text("Fermer")
+                            }
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = HighDensitySurface
                     )
                 }
 
