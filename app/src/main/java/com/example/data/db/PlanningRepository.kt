@@ -232,14 +232,10 @@ class PlanningRepository(
             )
         )
 
-        val createdIds = mutableListOf<Long>()
-        for (slot in slotsToCreate) {
-            val slotWithId = slot.copy(id = generateUniqueId())
-            planningDao.insertSlot(slotWithId)
-            cloudSyncManager?.pushSlot(slotWithId)
-            createdIds.add(slotWithId.id)
-        }
-        return createdIds
+        val createdSlots = slotsToCreate.map { it.copy(id = generateUniqueId()) }
+        planningDao.insertSlots(createdSlots)
+        cloudSyncManager?.pushFullSync()
+        return createdSlots.map { it.id }
     }
 
     // --- Student Self-Registration (used in Version Élève) ---
@@ -277,14 +273,12 @@ class PlanningRepository(
             )
             planningDao.insertStudent(newStudent)
             student = newStudent
-            cloudSyncManager?.pushStudent(student)
         } else {
             // Update level/phone if needed
             if (student.level != level || (cleanPhone.isNotBlank() && student.phone != cleanPhone)) {
                 val updated = student.copy(level = level, phone = cleanPhone.ifBlank { student.phone })
                 planningDao.updateStudent(updated)
                 student = updated
-                cloudSyncManager?.pushStudent(student)
             }
         }
 
@@ -294,6 +288,7 @@ class PlanningRepository(
         val isSlotFull = bookings.filter { !it.isWaitingList }.size >= (slot?.maxCapacity ?: 4)
 
         val enrolled = enrollStudent(slotId, student.id, isWaitingList = isSlotFull)
+        cloudSyncManager?.pushFullSync()
         return Pair(student, enrolled)
     }
 
