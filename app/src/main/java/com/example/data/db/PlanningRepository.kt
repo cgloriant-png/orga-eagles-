@@ -86,6 +86,11 @@ class PlanningRepository(
     }
 
     suspend fun deleteSlot(slotId: Long) {
+        val bookings = planningDao.getBookingsForSlotSync(slotId)
+        for (b in bookings) {
+            planningDao.deleteBookingById(b.id)
+            cloudSyncManager?.deleteBooking(b.id)
+        }
         planningDao.deleteSlotById(slotId)
         cloudSyncManager?.deleteSlot(slotId)
     }
@@ -104,6 +109,11 @@ class PlanningRepository(
     }
 
     suspend fun deleteStudent(student: StudentEntity) {
+        val bookings = planningDao.getAllBookingsList().filter { it.studentId == student.id }
+        for (b in bookings) {
+            planningDao.deleteBookingById(b.id)
+            cloudSyncManager?.deleteBooking(b.id)
+        }
         planningDao.deleteStudent(student)
         cloudSyncManager?.deleteStudent(student.id)
     }
@@ -288,13 +298,14 @@ class PlanningRepository(
             slot.dateIso
         }
 
+        val timeRange = formatTimeRangeFrench(slot.startTime, slot.endTime)
         return if (!isWaitingList) {
             """
             🪂 *INSCRIPTION CRÉNEAU PARAMOTEUR* 🪂
             Bonjour ! Je m'inscris au créneau suivant :
             
             📅 *Date* : $formattedDate
-            ⏰ *Horaire* : ${slot.startTime} - ${slot.endTime}
+            ⏰ *Horaire* : $timeRange
             ${type.emoji} *Activité* : ${type.label} (${slot.title})
             📍 *Lieu* : ${slot.location}
             
@@ -310,7 +321,7 @@ class PlanningRepository(
             ⏳ *DEMANDE LISTE D'ATTENTE* ⏳
             Bonjour ! Le créneau étant complet, je souhaite me placer en liste d'attente :
             
-            📅 *Date* : $formattedDate (${slot.startTime} - ${slot.endTime})
+            📅 *Date* : $formattedDate ($timeRange)
             ${type.emoji} *Activité* : ${type.label}
             👤 *Élève* : ${student.fullName} (${student.phone})
             """.trimIndent()
@@ -339,8 +350,9 @@ class PlanningRepository(
             daySlots.forEach { item ->
                 val slot = item.slot
                 val type = PlanningLessonType.fromCode(slot.lessonType)
+                val timeRange = formatTimeRangeFrench(slot.startTime, slot.endTime)
 
-                sb.append("  • *").append(slot.startTime).append(" - ").append(slot.endTime).append("* | ")
+                sb.append("  • *").append(timeRange).append("* | ")
                 sb.append(type.emoji).append(" *").append(type.label).append("*\n")
                 if (slot.location.isNotBlank()) {
                     sb.append("    📍 ").append(slot.location).append("\n")

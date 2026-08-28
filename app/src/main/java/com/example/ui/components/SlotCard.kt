@@ -39,6 +39,8 @@ fun SlotCard(
     val maxCap = slot.maxCapacity
     val ratio = if (maxCap > 0) (confirmedCount.toFloat() / maxCap).coerceIn(0f, 1f) else 0f
 
+    val timeRangeText = formatTimeRangeFrench(slot.startTime, slot.endTime)
+
     val cardBg = when {
         isFull -> Color(0xFFFFFAF9)
         else -> HighDensitySurface
@@ -46,14 +48,14 @@ fun SlotCard(
 
     val cardBorderColor = when {
         isFull -> RedAlertText.copy(alpha = 0.5f)
-        else -> GreenSuccess.copy(alpha = 0.5f)
+        else -> lessonType.borderColor.copy(alpha = 0.6f)
     }
 
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
-        border = BorderStroke(1.dp, cardBorderColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
+        border = BorderStroke(1.5.dp, cardBorderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -61,26 +63,26 @@ fun SlotCard(
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
-            // Header: Heure, Type (Gonflage/Vol/Perf) & Statut Dispo (Vert/Rouge)
+            // Header: Heure (de 8h à 10h), Type (VOL / GONFLAGE / PERF) & Statut Dispo (Vert/Rouge)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Heure
+                // Heure : "de 8h à 10h"
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = PrimaryBlueDark,
                     contentColor = Color.White
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color.White)
                         Text(
-                            text = "${slot.startTime} - ${slot.endTime}",
+                            text = timeRangeText,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = Color.White
@@ -88,27 +90,23 @@ fun SlotCard(
                     }
                 }
 
-                // Type de leçon (Gonflage, Vol, Perf)
+                // Type de leçon (VOL, GONFLAGE, PERF) - Grand Badge Visuel & Coloré
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = when (lessonType) {
-                        PlanningLessonType.GONFLAGE -> Color(0xFFE0F2FE)
-                        PlanningLessonType.VOL -> Color(0xFFDCFCE7)
-                        PlanningLessonType.PERF -> Color(0xFFFFEDD5)
-                    },
-                    border = BorderStroke(0.5.dp, PrimaryBlue.copy(alpha = 0.2f))
+                    color = lessonType.containerColor,
+                    border = BorderStroke(1.5.dp, lessonType.borderColor)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(lessonType.emoji, fontSize = 12.sp)
+                        Text(lessonType.emoji, fontSize = 14.sp)
                         Text(
-                            text = lessonType.label,
-                            fontWeight = FontWeight.Bold,
+                            text = lessonType.label.uppercase(),
+                            fontWeight = FontWeight.Black,
                             fontSize = 12.sp,
-                            color = HighDensityHeaderTitle
+                            color = lessonType.primaryColor
                         )
                     }
                 }
@@ -125,7 +123,7 @@ fun SlotCard(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = RedAlertText,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                         )
                     }
                 } else {
@@ -139,7 +137,7 @@ fun SlotCard(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = GreenSuccess,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                         )
                     }
                 }

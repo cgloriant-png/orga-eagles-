@@ -107,15 +107,29 @@ data class SlotWithBookings(
 ) {
     val confirmedBookings: List<BookingWithStudent> get() = bookings.filter { !it.booking.isWaitingList }
     val waitingListBookings: List<BookingWithStudent> get() = bookings.filter { it.booking.isWaitingList }
+    val confirmedCount: Int get() = confirmedBookings.size
     val availablePlaces: Int get() = (slot.maxCapacity - confirmedBookings.size).coerceAtLeast(0)
     val isFull: Boolean get() = availablePlaces == 0
     val enrolledStudentIds: Set<Long> get() = bookings.map { it.student.id }.toSet()
 }
 
-enum class PlanningLessonType(val code: String, val label: String, val emoji: String, val defaultCapacity: Int) {
-    GONFLAGE("GONFLAGE", "Gonflage", "🪂", 4),
-    VOL("VOL", "Vol", "✈️", 2),
-    PERF("PERF", "Perf", "🎯", 3);
+enum class PlanningLessonType(
+    val code: String,
+    val label: String,
+    val shortLabel: String,
+    val emoji: String,
+    val defaultCapacity: Int,
+    val primaryColorHex: Long,
+    val containerColorHex: Long,
+    val borderColorHex: Long
+) {
+    GONFLAGE("GONFLAGE", "Gonflage au sol", "GONFLAGE", "🪁", 4, 0xFFD97706, 0xFFFEF3C7, 0xFFF59E0B),
+    VOL("VOL", "Vol Paramoteur", "VOL", "✈️", 2, 0xFF0284C7, 0xFFE0F2FE, 0xFF38BDF8),
+    PERF("PERF", "Perfectionnement", "PERF", "🎯", 3, 0xFF7C3AED, 0xFFEDE9FE, 0xFFA78BFA);
+
+    val primaryColor: androidx.compose.ui.graphics.Color get() = androidx.compose.ui.graphics.Color(primaryColorHex)
+    val containerColor: androidx.compose.ui.graphics.Color get() = androidx.compose.ui.graphics.Color(containerColorHex)
+    val borderColor: androidx.compose.ui.graphics.Color get() = androidx.compose.ui.graphics.Color(borderColorHex)
 
     companion object {
         fun fromCode(code: String): PlanningLessonType {
@@ -123,4 +137,25 @@ enum class PlanningLessonType(val code: String, val label: String, val emoji: St
         }
     }
 }
+
+fun formatTimeFrench(timeStr: String): String {
+    val clean = timeStr.trim().replace(":", "h").replace("H", "h")
+    val parts = clean.split("h")
+    if (parts.isEmpty()) return timeStr
+    val hour = parts[0].trim().toIntOrNull() ?: return timeStr
+    val minute = if (parts.size > 1) parts[1].trim() else ""
+    return if (minute.isEmpty() || minute == "00" || minute == "0") {
+        "${hour}h"
+    } else {
+        val paddedMinute = if (minute.length == 1) "${minute}0" else minute
+        "${hour}h$paddedMinute"
+    }
+}
+
+fun formatTimeRangeFrench(startTime: String, endTime: String): String {
+    val start = formatTimeFrench(startTime)
+    val end = formatTimeFrench(endTime)
+    return "de $start à $end"
+}
+
 

@@ -411,6 +411,27 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onOpenWhatsAppShare = {
                                         openWhatsAppDirect(viewModel.getWhatsAppText())
+                                    },
+                                    onOpenEnrollStudent = { slotItem ->
+                                        slotToEnrollStudent = slotItem
+                                    },
+                                    onUnenrollStudent = { slotId, studentId ->
+                                        viewModel.unenrollStudent(slotId, studentId)
+                                    },
+                                    onToggleAttendance = { bookingId, studentId, attended ->
+                                        viewModel.toggleAttendance(bookingId, studentId, attended)
+                                    },
+                                    onEditSlot = { slot ->
+                                        slotToEdit = slot
+                                        initialDateForSlotDialog = slot.dateIso
+                                        showAddSlotDialog = true
+                                    },
+                                    onDeleteSlot = { slotId ->
+                                        viewModel.deleteSlot(slotId)
+                                    },
+                                    onOpenStandardDayForDate = { dateIso ->
+                                        dateForStandardDay = dateIso
+                                        showStandardDayDialog = true
                                     }
                                 )
 

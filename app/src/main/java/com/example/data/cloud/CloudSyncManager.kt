@@ -72,7 +72,7 @@ class CloudSyncManager(
     private var sseJob: Job? = null
 
     // Track deleted IDs to prevent reviving deleted items across devices
-    private val prefs = context.getSharedPreferences("paramoteur_deleted_tombstones_v2", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("paramoteur_deleted_tombstones_v3", Context.MODE_PRIVATE)
 
     fun recordDeletedId(type: String, id: Long) {
         val currentSet = prefs.getStringSet("deleted_$type", emptySet())?.toMutableSet() ?: mutableSetOf()
@@ -87,7 +87,7 @@ class CloudSyncManager(
             ?.toSet() ?: emptySet()
     }
 
-    private fun saveRemoteDeletedIds(slotIds: Set<Long>, bookingIds: Set<Long>) {
+    private fun saveRemoteDeletedIds(slotIds: Set<Long>, bookingIds: Set<Long>, studentIds: Set<Long>) {
         if (slotIds.isNotEmpty()) {
             val currentSlots = prefs.getStringSet("deleted_slot", emptySet())?.toMutableSet() ?: mutableSetOf()
             currentSlots.addAll(slotIds.map { it.toString() })
@@ -97,6 +97,11 @@ class CloudSyncManager(
             val currentBookings = prefs.getStringSet("deleted_booking", emptySet())?.toMutableSet() ?: mutableSetOf()
             currentBookings.addAll(bookingIds.map { it.toString() })
             prefs.edit().putStringSet("deleted_booking", currentBookings).apply()
+        }
+        if (studentIds.isNotEmpty()) {
+            val currentStudents = prefs.getStringSet("deleted_student", emptySet())?.toMutableSet() ?: mutableSetOf()
+            currentStudents.addAll(studentIds.map { it.toString() })
+            prefs.edit().putStringSet("deleted_student", currentStudents).apply()
         }
     }
 
@@ -262,6 +267,7 @@ class CloudSyncManager(
             val remoteBookingsArray = dataJson.optJSONArray("bookings") ?: JSONArray()
             val deletedSlotsArray = dataJson.optJSONArray("deletedSlotIds") ?: JSONArray()
             val deletedBookingsArray = dataJson.optJSONArray("deletedBookingIds") ?: JSONArray()
+            val deletedStudentsArray = dataJson.optJSONArray("deletedStudentIds") ?: JSONArray()
 
             val remoteDeletedSlotIds = mutableSetOf<Long>()
             for (i in 0 until deletedSlotsArray.length()) {
@@ -273,10 +279,16 @@ class CloudSyncManager(
                 remoteDeletedBookingIds.add(deletedBookingsArray.getLong(i))
             }
 
-            saveRemoteDeletedIds(remoteDeletedSlotIds, remoteDeletedBookingIds)
+            val remoteDeletedStudentIds = mutableSetOf<Long>()
+            for (i in 0 until deletedStudentsArray.length()) {
+                remoteDeletedStudentIds.add(deletedStudentsArray.getLong(i))
+            }
+
+            saveRemoteDeletedIds(remoteDeletedSlotIds, remoteDeletedBookingIds, remoteDeletedStudentIds)
 
             val allDeletedSlots = remoteDeletedSlotIds + getDeletedIds("slot")
             val allDeletedBookings = remoteDeletedBookingIds + getDeletedIds("booking")
+            val allDeletedStudents = remoteDeletedStudentIds + getDeletedIds("student")
 
             val remoteSlots = mutableListOf<LessonSlotEntity>()
             for (i in 0 until remoteSlotsArray.length()) {
@@ -304,19 +316,22 @@ class CloudSyncManager(
             val remoteStudents = mutableListOf<StudentEntity>()
             for (i in 0 until remoteStudentsArray.length()) {
                 val st = remoteStudentsArray.getJSONObject(i)
-                remoteStudents.add(
-                    StudentEntity(
-                        id = st.optLong("id"),
-                        firstName = st.optString("firstName"),
-                        lastName = st.optString("lastName"),
-                        phone = st.optString("phone"),
-                        email = st.optString("email"),
-                        level = st.optString("level", "Gonflage"),
-                        notes = st.optString("notes"),
-                        completedSessions = st.optInt("completedSessions", 0),
-                        createdAt = st.optLong("createdAt", System.currentTimeMillis())
+                val id = st.optLong("id")
+                if (id !in allDeletedStudents) {
+                    remoteStudents.add(
+                        StudentEntity(
+                            id = id,
+                            firstName = st.optString("firstName"),
+                            lastName = st.optString("lastName"),
+                            phone = st.optString("phone"),
+                            email = st.optString("email"),
+                            level = st.optString("level", "Gonflage"),
+                            notes = st.optString("notes"),
+                            completedSessions = st.optInt("completedSessions", 0),
+                            createdAt = st.optLong("createdAt", System.currentTimeMillis())
+                        )
                     )
-                )
+                }
             }
 
             val remoteBookings = mutableListOf<BookingEntity>()
@@ -338,6 +353,7 @@ class CloudSyncManager(
             }
 
             val localSlots = dao.getAllSlotsList()
+            val localStudents = dao.getAllStudentsList()
             val localBookings = dao.getAllBookingsList()
 
             // 1. Delete slots that were deleted
@@ -350,28 +366,35 @@ class CloudSyncManager(
                 dao.deleteBookingById(delId)
             }
 
-            // 3. Upsert remote slots
+            // 3. Delete students that were deleted
+            for (delId in allDeletedStudents) {
+                dao.deleteStudentById(delId)
+            }
+
+            // 4. Upsert remote slots
             if (remoteSlots.isNotEmpty()) {
                 dao.insertSlots(remoteSlots)
             }
 
-            // 4. Upsert remote students
+            // 5. Upsert remote students
             if (remoteStudents.isNotEmpty()) {
                 dao.insertStudents(remoteStudents)
             }
 
-            // 5. Upsert remote bookings
+            // 6. Upsert remote bookings
             if (remoteBookings.isNotEmpty()) {
                 dao.insertBookings(remoteBookings)
             }
 
-            // 6. Check if local had new items not yet in remote, and push merge if needed
+            // 7. Check if local had new items not yet in remote, and push merge if needed
             val remoteSlotIds = remoteSlots.map { it.id }.toSet()
+            val remoteStudentIds = remoteStudents.map { it.id }.toSet()
             val remoteBookingIds = remoteBookings.map { it.id }.toSet()
             val hasNewLocalSlots = localSlots.any { it.id !in remoteSlotIds && it.id !in allDeletedSlots }
+            val hasNewLocalStudents = localStudents.any { it.id !in remoteStudentIds && it.id !in allDeletedStudents }
             val hasNewLocalBookings = localBookings.any { it.id !in remoteBookingIds && it.id !in allDeletedBookings }
 
-            if (hasNewLocalSlots || hasNewLocalBookings) {
+            if (hasNewLocalSlots || hasNewLocalStudents || hasNewLocalBookings) {
                 pushFullSyncInternal()
             }
 
@@ -401,6 +424,7 @@ class CloudSyncManager(
             val bookings = dao.getAllBookingsList()
             val deletedSlotIds = getDeletedIds("slot")
             val deletedBookingIds = getDeletedIds("booking")
+            val deletedStudentIds = getDeletedIds("student")
 
             val slotsArray = JSONArray()
             for (s in slots) {
@@ -423,17 +447,19 @@ class CloudSyncManager(
 
             val studentsArray = JSONArray()
             for (st in students) {
-                val obj = JSONObject()
-                obj.put("id", st.id)
-                obj.put("firstName", st.firstName)
-                obj.put("lastName", st.lastName)
-                obj.put("phone", st.phone)
-                obj.put("email", st.email)
-                obj.put("level", st.level)
-                obj.put("notes", st.notes)
-                obj.put("completedSessions", st.completedSessions)
-                obj.put("createdAt", st.createdAt)
-                studentsArray.put(obj)
+                if (st.id !in deletedStudentIds) {
+                    val obj = JSONObject()
+                    obj.put("id", st.id)
+                    obj.put("firstName", st.firstName)
+                    obj.put("lastName", st.lastName)
+                    obj.put("phone", st.phone)
+                    obj.put("email", st.email)
+                    obj.put("level", st.level)
+                    obj.put("notes", st.notes)
+                    obj.put("completedSessions", st.completedSessions)
+                    obj.put("createdAt", st.createdAt)
+                    studentsArray.put(obj)
+                }
             }
 
             val bookingsArray = JSONArray()
@@ -456,14 +482,18 @@ class CloudSyncManager(
             val deletedBookingsJson = JSONArray()
             deletedBookingIds.forEach { deletedBookingsJson.put(it) }
 
+            val deletedStudentsJson = JSONArray()
+            deletedStudentIds.forEach { deletedStudentsJson.put(it) }
+
             val dataJson = JSONObject()
-            dataJson.put("version", 2)
+            dataJson.put("version", 3)
             dataJson.put("lastUpdated", System.currentTimeMillis())
             dataJson.put("slots", slotsArray)
             dataJson.put("students", studentsArray)
             dataJson.put("bookings", bookingsArray)
             dataJson.put("deletedSlotIds", deletedSlotsJson)
             dataJson.put("deletedBookingIds", deletedBookingsJson)
+            dataJson.put("deletedStudentIds", deletedStudentsJson)
 
             val jsonString = dataJson.toString()
 
@@ -530,7 +560,7 @@ class CloudSyncManager(
     }
 
     fun deleteStudent(studentId: Long) {
-        pushFullSync()
+        recordDeletedId("student", studentId)
     }
 
     fun pushBooking(booking: BookingEntity) {

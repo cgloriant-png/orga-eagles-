@@ -341,7 +341,7 @@ fun StudentPortalScreen(
                                         border = BorderStroke(1.dp, BorderOutline.copy(alpha = 0.5f))
                                     ) {
                                         Row(modifier = Modifier.padding(3.dp)) {
-                                            PlanningViewMode.entries.forEach { mode ->
+                                            listOf(PlanningViewMode.MOIS, PlanningViewMode.TRIMESTRE, PlanningViewMode.ANNUEL).forEach { mode ->
                                                 val isSelected = calendarViewMode == mode
                                                 Surface(
                                                     shape = RoundedCornerShape(8.dp),
@@ -353,6 +353,7 @@ fun StudentPortalScreen(
                                                             PlanningViewMode.ANNUEL -> "Annuel"
                                                             PlanningViewMode.TRIMESTRE -> "Trimestre"
                                                             PlanningViewMode.MOIS -> "Mois"
+                                                            else -> "Mois"
                                                         },
                                                         fontSize = 11.sp,
                                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
@@ -386,7 +387,7 @@ fun StudentPortalScreen(
                                                     if (selectedQuarter > 1) selectedQuarter--
                                                     else { selectedQuarter = 4; selectedYear-- }
                                                 }
-                                                PlanningViewMode.MOIS -> {
+                                                else -> {
                                                     if (selectedMonth > 0) selectedMonth--
                                                     else { selectedMonth = 11; selectedYear-- }
                                                 }
@@ -400,7 +401,7 @@ fun StudentPortalScreen(
                                     val titleText = when (calendarViewMode) {
                                         PlanningViewMode.ANNUEL -> "Année $selectedYear"
                                         PlanningViewMode.TRIMESTRE -> "Trimestre T$selectedQuarter $selectedYear (${getQuarterMonthsLabel(selectedQuarter)})"
-                                        PlanningViewMode.MOIS -> "${getMonthName(selectedMonth).replaceFirstChar { it.uppercase() }} $selectedYear"
+                                        else -> "${getMonthName(selectedMonth).replaceFirstChar { it.uppercase() }} $selectedYear"
                                     }
 
                                     Text(
@@ -418,7 +419,7 @@ fun StudentPortalScreen(
                                                     if (selectedQuarter < 4) selectedQuarter++
                                                     else { selectedQuarter = 1; selectedYear++ }
                                                 }
-                                                PlanningViewMode.MOIS -> {
+                                                else -> {
                                                     if (selectedMonth < 11) selectedMonth++
                                                     else { selectedMonth = 0; selectedYear++ }
                                                 }
@@ -460,13 +461,6 @@ fun StudentPortalScreen(
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             when (calendarViewMode) {
-                                PlanningViewMode.MOIS -> MonthView(
-                                    year = selectedYear,
-                                    month = selectedMonth,
-                                    slotsByDate = slotsByDate,
-                                    onSelectDay = { dateIso -> selectedDayForDetail = dateIso },
-                                    onOpenAddSlotForDate = { dateIso -> selectedDayForDetail = dateIso }
-                                )
                                 PlanningViewMode.TRIMESTRE -> QuarterView(
                                     year = selectedYear,
                                     quarter = selectedQuarter,
@@ -484,6 +478,13 @@ fun StudentPortalScreen(
                                         selectedMonth = m
                                         calendarViewMode = PlanningViewMode.MOIS
                                     }
+                                )
+                                else -> MonthView(
+                                    year = selectedYear,
+                                    month = selectedMonth,
+                                    slotsByDate = slotsByDate,
+                                    onSelectDay = { dateIso -> selectedDayForDetail = dateIso },
+                                    onOpenAddSlotForDate = { dateIso -> selectedDayForDetail = dateIso }
                                 )
                             }
                         }
@@ -816,13 +817,14 @@ fun StudentSlotCard(
     val slot = slotItem.slot
     val type = PlanningLessonType.fromCode(slot.lessonType)
     val isFull = slotItem.isFull
+    val timeRangeText = formatTimeRangeFrench(slot.startTime, slot.endTime)
 
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = HighDensitySurface),
         border = BorderStroke(
             1.5.dp,
-            if (isAlreadyEnrolled) PrimaryBlue else if (isFull) RedAlertText.copy(alpha = 0.5f) else GreenSuccess.copy(alpha = 0.5f)
+            if (isAlreadyEnrolled) PrimaryBlue else if (isFull) RedAlertText.copy(alpha = 0.5f) else type.borderColor.copy(alpha = 0.7f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
@@ -833,47 +835,77 @@ fun StudentSlotCard(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Date & Type Header
+            // Header: Heure (de 8h à 10h) & Type (VOL / GONFLAGE / PERF)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Heure format "de 8h à 10h"
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = PrimaryBlueDark,
+                    contentColor = Color.White
                 ) {
-                    Text(type.emoji, fontSize = 18.sp)
-                    Column {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color.White)
                         Text(
-                            text = "${slot.dateIso} • ${slot.startTime} - ${slot.endTime}",
+                            text = timeRangeText,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = HighDensityHeaderTitle
+                            fontSize = 12.sp,
+                            color = Color.White
                         )
+                    }
+                }
+
+                // Type de leçon (VOL, GONFLAGE, PERF) - Grand Badge Visuel
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = type.containerColor,
+                    border = BorderStroke(1.5.dp, type.borderColor)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Text(type.emoji, fontSize = 13.sp)
                         Text(
-                            text = "${type.label} (${slot.title})",
+                            text = type.label.uppercase(),
+                            fontWeight = FontWeight.Black,
                             fontSize = 11.sp,
-                            color = SecondaryText
+                            color = type.primaryColor
                         )
                     }
                 }
 
                 // Status Badge
                 if (isAlreadyEnrolled) {
-                    Surface(shape = RoundedCornerShape(6.dp), color = PrimaryBlueContainer) {
-                        Text("✅ Déjà inscrit", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    Surface(shape = RoundedCornerShape(8.dp), color = PrimaryBlueContainer) {
+                        Text("✅ Inscrit", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
                     }
                 } else if (isFull) {
-                    Surface(shape = RoundedCornerShape(6.dp), color = RedAlertBg) {
-                        Text("🔴 COMPLET", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = RedAlertText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    Surface(shape = RoundedCornerShape(8.dp), color = RedAlertBg, border = BorderStroke(1.dp, RedAlertText)) {
+                        Text("🔴 COMPLET", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = RedAlertText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
                     }
                 } else {
-                    Surface(shape = RoundedCornerShape(6.dp), color = GreenSuccessBg) {
-                        Text("🟢 ${slotItem.availablePlaces} place(s) dispo", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = GreenSuccess, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    Surface(shape = RoundedCornerShape(8.dp), color = GreenSuccessBg, border = BorderStroke(1.dp, GreenSuccess)) {
+                        Text("🟢 ${slotItem.availablePlaces} dispo", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = GreenSuccess, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
                     }
                 }
             }
+
+            // Title & Location
+            Text(
+                text = slot.title,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = HighDensityHeaderTitle
+            )
 
             if (slot.location.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
