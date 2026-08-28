@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
                 val savedStandardDayConfig by viewModel.savedStandardDayConfig.collectAsStateWithLifecycle()
                 val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
                 val syncStatusMsg by viewModel.syncStatusMessage.collectAsStateWithLifecycle()
+                val lastSyncTime by viewModel.lastSyncTime.collectAsStateWithLifecycle()
 
                 // Filter States
                 val selectedDateFilter by viewModel.selectedDateFilter.collectAsStateWithLifecycle()
@@ -142,6 +143,9 @@ class MainActivity : ComponentActivity() {
                         onSwitchToInstructorMode = {
                             viewModel.setAppMode(false)
                         },
+                        syncStatus = syncStatus,
+                        syncStatusMsg = syncStatusMsg,
+                        lastSyncTime = lastSyncTime,
                         onForceSync = {
                             viewModel.forceSync()
                         }
@@ -170,6 +174,31 @@ class MainActivity : ComponentActivity() {
                                     ) {
                                         Text("🪂", fontSize = 20.sp)
                                         Column {
+                                            val statusDotColor = when (syncStatus) {
+                                                com.example.data.cloud.SyncStatus.CONNECTED_SYNCED -> Color(0xFF34D399)
+                                                com.example.data.cloud.SyncStatus.SYNCING -> Color(0xFFFBBF24)
+                                                com.example.data.cloud.SyncStatus.CONNECTING -> Color(0xFF60A5FA)
+                                                com.example.data.cloud.SyncStatus.OFFLINE, com.example.data.cloud.SyncStatus.ERROR -> Color(0xFFEF4444)
+                                            }
+                                            val statusBgColor = when (syncStatus) {
+                                                com.example.data.cloud.SyncStatus.CONNECTED_SYNCED -> Color(0xFF10B981).copy(alpha = 0.25f)
+                                                com.example.data.cloud.SyncStatus.SYNCING -> Color(0xFFF59E0B).copy(alpha = 0.25f)
+                                                com.example.data.cloud.SyncStatus.CONNECTING -> Color(0xFF3B82F6).copy(alpha = 0.25f)
+                                                com.example.data.cloud.SyncStatus.OFFLINE, com.example.data.cloud.SyncStatus.ERROR -> Color(0xFFDC2626).copy(alpha = 0.25f)
+                                            }
+                                            val statusBorderColor = when (syncStatus) {
+                                                com.example.data.cloud.SyncStatus.CONNECTED_SYNCED -> Color(0xFF10B981)
+                                                com.example.data.cloud.SyncStatus.SYNCING -> Color(0xFFF59E0B)
+                                                com.example.data.cloud.SyncStatus.CONNECTING -> Color(0xFF3B82F6)
+                                                com.example.data.cloud.SyncStatus.OFFLINE, com.example.data.cloud.SyncStatus.ERROR -> Color(0xFFDC2626)
+                                            }
+                                            val statusText = when (syncStatus) {
+                                                com.example.data.cloud.SyncStatus.CONNECTED_SYNCED -> if (lastSyncTime.isNotBlank()) "Direct $lastSyncTime" else "En direct"
+                                                com.example.data.cloud.SyncStatus.SYNCING -> "Sync..."
+                                                com.example.data.cloud.SyncStatus.CONNECTING -> "Connexion..."
+                                                com.example.data.cloud.SyncStatus.OFFLINE, com.example.data.cloud.SyncStatus.ERROR -> "Hors-ligne"
+                                            }
+
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Text(
                                                     "Planning & Élèves",
@@ -180,8 +209,8 @@ class MainActivity : ComponentActivity() {
                                                 // Sync Live Indicator
                                                 Surface(
                                                     shape = RoundedCornerShape(10.dp),
-                                                    color = Color(0xFF10B981).copy(alpha = 0.25f),
-                                                    border = BorderStroke(1.dp, Color(0xFF10B981))
+                                                    color = statusBgColor,
+                                                    border = BorderStroke(1.dp, statusBorderColor)
                                                 ) {
                                                     Row(
                                                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
@@ -190,10 +219,10 @@ class MainActivity : ComponentActivity() {
                                                         Box(
                                                             modifier = Modifier
                                                                 .size(6.dp)
-                                                                .background(Color(0xFF34D399), CircleShape)
+                                                                .background(statusDotColor, CircleShape)
                                                         )
                                                         Spacer(modifier = Modifier.width(3.dp))
-                                                        Text("Cloud Sync", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6EE7B7))
+                                                        Text(statusText, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                                     }
                                                 }
                                             }

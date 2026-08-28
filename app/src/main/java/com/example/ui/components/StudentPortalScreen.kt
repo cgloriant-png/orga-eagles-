@@ -30,11 +30,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.cloud.SyncStatus
 import com.example.data.model.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.PlanningViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+
+private data class SyncPillStyle(
+    val dotColor: Color,
+    val bgColor: Color,
+    val borderColor: Color,
+    val text: String
+)
 
 @Composable
 fun StudentPortalScreen(
@@ -46,6 +54,9 @@ fun StudentPortalScreen(
     allStudents: List<StudentEntity>,
     onVerifyPin: (String) -> Boolean,
     onSwitchToInstructorMode: () -> Unit,
+    syncStatus: SyncStatus = SyncStatus.CONNECTED_SYNCED,
+    syncStatusMsg: String = "En direct",
+    lastSyncTime: String = "",
     onForceSync: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -132,24 +143,32 @@ fun StudentPortalScreen(
                         ) {
                             Text("🪂", fontSize = 20.sp)
                             Column {
+                                val pillStyle = when (syncStatus) {
+                                    SyncStatus.CONNECTED_SYNCED -> SyncPillStyle(Color(0xFF34D399), Color(0xFF10B981).copy(alpha = 0.25f), Color(0xFF10B981), if (lastSyncTime.isNotBlank()) "En direct $lastSyncTime" else "En direct")
+                                    SyncStatus.SYNCING -> SyncPillStyle(Color(0xFFFBBF24), Color(0xFFF59E0B).copy(alpha = 0.25f), Color(0xFFF59E0B), "Synchronisation...")
+                                    SyncStatus.CONNECTING -> SyncPillStyle(Color(0xFF60A5FA), Color(0xFF3B82F6).copy(alpha = 0.25f), Color(0xFF3B82F6), "Connexion...")
+                                    SyncStatus.OFFLINE, SyncStatus.ERROR -> SyncPillStyle(Color(0xFFEF4444), Color(0xFFDC2626).copy(alpha = 0.25f), Color(0xFFDC2626), "Hors-ligne")
+                                }
+
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text("Espace Élèves", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = Color(0xFF10B981).copy(alpha = 0.25f),
-                                        border = BorderStroke(1.dp, Color(0xFF10B981))
+                                        color = pillStyle.bgColor,
+                                        border = BorderStroke(1.dp, pillStyle.borderColor),
+                                        modifier = Modifier.clickable { onForceSync() }
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Box(
                                                 modifier = Modifier
                                                     .size(6.dp)
-                                                    .background(Color(0xFF34D399), CircleShape)
+                                                    .background(pillStyle.dotColor, CircleShape)
                                             )
                                             Spacer(modifier = Modifier.width(3.dp))
-                                            Text("En direct", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6EE7B7))
+                                            Text(pillStyle.text, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                         }
                                     }
                                 }
