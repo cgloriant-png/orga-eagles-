@@ -39,7 +39,7 @@ class CloudSyncManager(
     private val TAG = "CloudSyncManager"
 
     // Multi-tier cloud endpoints for maximum reliability
-    private val NTFY_TOPIC = "paramoteur_planning_data_v2"
+    private val NTFY_TOPIC = "paramoteur_planning_live_v4"
     private val NTFY_BASE_URL = "https://ntfy.sh/$NTFY_TOPIC"
     private val REST_BACKUP_URL = "https://api.restful-api.dev/objects/ff8081819ff5b11001a043d6d4743921"
     private val REST_CREATE_URL = "https://api.restful-api.dev/objects"
@@ -70,9 +70,10 @@ class CloudSyncManager(
     private val isSyncing = AtomicBoolean(false)
     private var syncJob: Job? = null
     private var sseJob: Job? = null
+    private var lastLocalTimestamp: Long = 0L
 
     // Track deleted IDs to prevent reviving deleted items across devices
-    private val prefs = context.getSharedPreferences("paramoteur_deleted_tombstones_v3", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("paramoteur_deleted_tombstones_v4", Context.MODE_PRIVATE)
 
     fun recordDeletedId(type: String, id: Long) {
         val currentSet = prefs.getStringSet("deleted_$type", emptySet())?.toMutableSet() ?: mutableSetOf()
@@ -497,9 +498,9 @@ class CloudSyncManager(
 
             val jsonString = dataJson.toString()
 
-            // 1. Instant broadcast to NTFY channel
+            // 1. Instant broadcast to NTFY channel (POST as plain text so NTFY stores full JSON in message)
             try {
-                val ntfyBody = jsonString.toRequestBody("application/json".toMediaType())
+                val ntfyBody = jsonString.toRequestBody("text/plain; charset=utf-8".toMediaType())
                 val ntfyReq = Request.Builder()
                     .url(NTFY_BASE_URL)
                     .addHeader("Title", "CloudSync")

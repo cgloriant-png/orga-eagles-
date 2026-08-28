@@ -121,6 +121,10 @@ class PlanningRepository(
     // --- Booking Actions ---
     suspend fun enrollStudent(slotId: Long, studentId: Long, isWaitingList: Boolean = false): Boolean {
         try {
+            val existing = planningDao.getBookingsForSlotSync(slotId).find { it.studentId == studentId }
+            if (existing != null) {
+                return false
+            }
             val booking = BookingEntity(
                 id = generateUniqueId(),
                 slotId = slotId,
@@ -279,7 +283,11 @@ class PlanningRepository(
         }
 
         // 3. Enroll into slot
-        val enrolled = enrollStudent(slotId, student.id, isWaitingList = false)
+        val slot = planningDao.getSlotById(slotId)
+        val bookings = planningDao.getBookingsForSlotSync(slotId)
+        val isSlotFull = bookings.filter { !it.isWaitingList }.size >= (slot?.maxCapacity ?: 4)
+
+        val enrolled = enrollStudent(slotId, student.id, isWaitingList = isSlotFull)
         return Pair(student, enrolled)
     }
 

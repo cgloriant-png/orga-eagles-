@@ -1021,54 +1021,51 @@ fun MonthDayCell(
                 }
             }
 
-            // Mini badges for slots
+            // Clean number of enrolled students (replaces cut-off slot text at the bottom)
             if (slots.isNotEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                val totalEnrolled = slots.sumOf { it.confirmedCount }
+                val totalCapacity = slots.sumOf { it.slot.maxCapacity }
+                val isFull = status == DayColorStatus.RED_FULL || (totalCapacity > 0 && totalEnrolled >= totalCapacity)
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (isFull) Color(0xFFFEE2E2) else if (totalEnrolled > 0) Color(0xFFEFF6FF) else Color(0xFFF0FDF4),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isFull) Color(0xFFEF4444).copy(alpha = 0.6f) else if (totalEnrolled > 0) PrimaryBlue.copy(alpha = 0.6f) else GreenSuccess.copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    slots.take(2).forEach { item ->
-                        val type = PlanningLessonType.fromCode(item.slot.lessonType)
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = type.containerColor,
-                            border = BorderStroke(0.5.dp, type.borderColor),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "${type.emoji} ${type.shortLabel}",
-                                    fontSize = 7.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = type.primaryColor,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    text = "${item.confirmedCount}/${item.slot.maxCapacity}",
-                                    fontSize = 7.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (item.isFull) RedAlertText else GreenSuccess
-                                )
-                            }
-                        }
-                    }
-                    if (slots.size > 2) {
-                        Text(
-                            text = "+${slots.size - 2}",
-                            fontSize = 7.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SecondaryText,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.padding(horizontal = 2.dp, vertical = 3.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(11.dp),
+                            tint = if (isFull) RedAlertText else if (totalEnrolled > 0) PrimaryBlue else GreenSuccess
                         )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = "$totalEnrolled",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (isFull) RedAlertText else if (totalEnrolled > 0) PrimaryBlue else GreenSuccess
+                        )
+                        if (totalCapacity > 0) {
+                            Text(
+                                text = "/$totalCapacity",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isFull) RedAlertText.copy(alpha = 0.7f) else SecondaryText
+                            )
+                        }
                     }
                 }
             } else {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
             }
         }
     }
