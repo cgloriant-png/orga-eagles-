@@ -23,7 +23,6 @@ import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 enum class SyncStatus {
     OFFLINE,
@@ -40,21 +39,18 @@ class CloudSyncManager(
 ) {
     private val TAG = "CloudSyncManager"
 
-    // Multi-tier cloud endpoints for real-time live sync between instructor & student phones
-    private val NTFY_TOPIC = "paramoteur_planning_live_v4"
-    private val NTFY_BASE_URL = "https://ntfy.sh/$NTFY_TOPIC"
-    private val SHARED_REST_ID = "ff8081819ff5b11001a047bac4454644"
-    private val REST_URL = "https://api.restful-api.dev/objects/$SHARED_REST_ID"
-    private val REST_CREATE_URL = "https://api.restful-api.dev/objects"
+    // Multi-device synchronized cloud topic
+    private val SYNC_TOPIC = "paramoteur_planning_sync_v5"
+    private val NTFY_BASE_URL = "https://ntfy.sh/$SYNC_TOPIC"
 
-    private val prefs = context.getSharedPreferences("paramoteur_sync_prefs_v4", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("paramoteur_sync_prefs_v5", Context.MODE_PRIVATE)
 
-    // Unique device ID to filter out own echo messages from the broadcast channel
+    // Unique device ID to identify senders and prevent infinite loops
     private val myDeviceId: String = prefs.getString("device_id", null) ?: UUID.randomUUID().toString().also {
         prefs.edit().putString("device_id", it).apply()
     }
 
-    private val client = OkHttpClient.Builder()
+    private val httpClient = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
         .writeTimeout(6, TimeUnit.SECONDS)
@@ -62,7 +58,7 @@ class CloudSyncManager(
         .build()
 
     // Long-lived client for SSE streaming
-    private val streamClient = OkHttpClient.Builder()
+    private val sseClient = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .retryOnConnectionFailure(true)
         .build()
@@ -119,23 +115,23 @@ class CloudSyncManager(
     }
 
     private fun startSyncLoops() {
-        // 1. Initial immediate sync + periodic background polling (every 3.5s)
+        // 1. Initial immediate sync + periodic background polling (every 4 seconds)
         syncJob?.cancel()
         syncJob = scope.launch(Dispatchers.IO) {
-            delay(200)
+            delay(150)
             syncFromCloud()
 
             while (isActive) {
-                delay(3500)
+                delay(4000)
                 try {
                     syncFromCloud()
                 } catch (e: Exception) {
-                    Log.w(TAG, "Sync loop error: ${e.message}")
+                    Log.w(TAG, "Periodic sync loop error: ${e.message}")
                 }
             }
         }
 
-        // 2. Real-time SSE stream for instant sub-second synchronization
+        // 2. Real-time Server-Sent Events (SSE) stream for instant sub-second synchronization
         sseJob?.cancel()
         sseJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
@@ -144,7 +140,7 @@ class CloudSyncManager(
                         .url("$NTFY_BASE_URL/sse")
                         .build()
 
-                    val response = streamClient.newCall(streamRequest).execute()
+                    val response = sseClient.newCall(streamRequest).execute()
                     val reader = BufferedReader(InputStreamReader(response.body?.byteStream()))
                     var line: String?
                     while (reader.readLine().also { line = it } != null && isActive) {
@@ -152,7 +148,7 @@ class CloudSyncManager(
                         if (currentLine.startsWith("data:")) {
                             val dataContent = currentLine.removePrefix("data:").trim()
                             if (dataContent.isNotBlank()) {
-                                handleIncomingNtfyData(dataContent)
+                                handleIncomingNtfyEvent(dataContent)
                             }
                         }
                     }
@@ -164,24 +160,55 @@ class CloudSyncManager(
         }
     }
 
-    private suspend fun handleIncomingNtfyData(dataContent: String) {
+    private suspend fun handleIncomingNtfyEvent(dataContent: String) {
         try {
             val ntfyObj = JSONObject(dataContent)
-            val messageString = ntfyObj.optString("message", "")
+            val eventType = ntfyObj.optString("event", "")
+            if (eventType != "message") return
 
-            if (messageString.startsWith("{")) {
-                val pingObj = JSONObject(messageString)
-                val sender = pingObj.optString("senderId", "")
-                if (sender == myDeviceId) {
-                    // Own broadcast echo -> ignore
-                    return
+            val messageString = ntfyObj.optString("message", "")
+            val attachmentObj = ntfyObj.optJSONObject("attachment")
+            val attachmentUrl = attachmentObj?.optString("url", "")
+
+            var snapshotJson: JSONObject? = null
+
+            // 1. Check direct message payload
+            if (messageString.startsWith("{") && messageString.contains("\"slots\"")) {
+                val directObj = JSONObject(messageString)
+                val sender = directObj.optString("senderId", "")
+                if (sender == myDeviceId) return // Own echo
+                snapshotJson = directObj
+            }
+            // 2. Or download attachment payload if provided
+            else if (!attachmentUrl.isNullOrBlank()) {
+                try {
+                    val getReq = Request.Builder().url(attachmentUrl).get().build()
+                    val resp = httpClient.newCall(getReq).execute()
+                    if (resp.isSuccessful) {
+                        val bodyText = resp.body?.string() ?: ""
+                        resp.close()
+                        if (bodyText.isNotBlank()) {
+                            val dlObj = JSONObject(bodyText)
+                            val sender = dlObj.optString("senderId", "")
+                            if (sender == myDeviceId) return // Own echo
+                            snapshotJson = dlObj
+                        }
+                    } else {
+                        resp.close()
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error downloading attachment: ${e.message}")
                 }
             }
 
-            // Remote change detected -> pull & merge immediately
-            syncFromCloud()
+            if (snapshotJson != null) {
+                mergeSnapshotIntoLocalDb(snapshotJson)
+            } else {
+                // Generic notification ping -> poll full cloud state
+                syncFromCloud()
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "handleIncomingNtfyData error: ${e.message}")
+            Log.w(TAG, "handleIncomingNtfyEvent error: ${e.message}")
         }
     }
 
@@ -194,176 +221,62 @@ class CloudSyncManager(
     }
 
     /**
-     * Pull remote state from Cloud, merge with local database, and ensure convergence
+     * Fetch the newest snapshot from cloud, merge with local DB, and re-publish union if needed
      */
     suspend fun syncFromCloud(forcePushMerged: Boolean = false) {
         syncMutex.withLock {
             try {
-                // 1. Fetch remote master state from REST URL
-                var remoteJson: JSONObject? = null
+                // Poll recent topic messages
+                var remoteSnapshot: JSONObject? = null
                 try {
-                    val restReq = Request.Builder()
-                        .url(REST_URL)
+                    val pollReq = Request.Builder()
+                        .url("$NTFY_BASE_URL/json?poll=1")
                         .get()
                         .build()
-                    val restResp = client.newCall(restReq).execute()
-                    if (restResp.isSuccessful) {
-                        val bodyText = restResp.body?.string() ?: ""
-                        restResp.close()
-                        if (bodyText.isNotBlank()) {
-                            val rootObj = JSONObject(bodyText)
-                            val dataObj = rootObj.optJSONObject("data")
-                            if (dataObj != null) {
-                                remoteJson = dataObj
-                            }
+                    val pollResp = httpClient.newCall(pollReq).execute()
+                    if (pollResp.isSuccessful) {
+                        val bodyText = pollResp.body?.string() ?: ""
+                        pollResp.close()
+                        val lines = bodyText.split("\n").filter { it.isNotBlank() }
+
+                        // Iterate in reverse (newest first) to find the most recent valid snapshot
+                        for (line in lines.reversed()) {
+                            try {
+                                val msgObj = JSONObject(line)
+                                val msgStr = msgObj.optString("message", "")
+                                val attObj = msgObj.optJSONObject("attachment")
+                                val attUrl = attObj?.optString("url", "")
+
+                                if (msgStr.startsWith("{") && msgStr.contains("\"slots\"")) {
+                                    remoteSnapshot = JSONObject(msgStr)
+                                    break
+                                } else if (!attUrl.isNullOrBlank()) {
+                                    val getReq = Request.Builder().url(attUrl).get().build()
+                                    val attResp = httpClient.newCall(getReq).execute()
+                                    if (attResp.isSuccessful) {
+                                        val attBody = attResp.body?.string() ?: ""
+                                        attResp.close()
+                                        if (attBody.isNotBlank()) {
+                                            remoteSnapshot = JSONObject(attBody)
+                                            break
+                                        }
+                                    } else {
+                                        attResp.close()
+                                    }
+                                }
+                            } catch (ignored: Exception) {}
                         }
                     } else {
-                        restResp.close()
+                        pollResp.close()
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "REST fetch error: ${e.message}")
+                    Log.w(TAG, "Poll error: ${e.message}")
                 }
 
-                // 2. Read all local data
-                val localSlots = dao.getAllSlotsList()
-                val localStudents = dao.getAllStudentsList()
-                val localBookings = dao.getAllBookingsList()
+                val hasNewLocalData = mergeSnapshotIntoLocalDb(remoteSnapshot)
 
-                var hasLocalNewData = false
-
-                if (remoteJson != null) {
-                    val remoteSlotsArray = remoteJson.optJSONArray("slots") ?: JSONArray()
-                    val remoteStudentsArray = remoteJson.optJSONArray("students") ?: JSONArray()
-                    val remoteBookingsArray = remoteJson.optJSONArray("bookings") ?: JSONArray()
-                    val deletedSlotsArray = remoteJson.optJSONArray("deletedSlotIds") ?: JSONArray()
-                    val deletedBookingsArray = remoteJson.optJSONArray("deletedBookingIds") ?: JSONArray()
-                    val deletedStudentsArray = remoteJson.optJSONArray("deletedStudentIds") ?: JSONArray()
-
-                    val remoteDeletedSlotIds = mutableSetOf<Long>()
-                    for (i in 0 until deletedSlotsArray.length()) {
-                        remoteDeletedSlotIds.add(deletedSlotsArray.getLong(i))
-                    }
-
-                    val remoteDeletedBookingIds = mutableSetOf<Long>()
-                    for (i in 0 until deletedBookingsArray.length()) {
-                        remoteDeletedBookingIds.add(deletedBookingsArray.getLong(i))
-                    }
-
-                    val remoteDeletedStudentIds = mutableSetOf<Long>()
-                    for (i in 0 until deletedStudentsArray.length()) {
-                        remoteDeletedStudentIds.add(deletedStudentsArray.getLong(i))
-                    }
-
-                    saveRemoteDeletedIds(remoteDeletedSlotIds, remoteDeletedBookingIds, remoteDeletedStudentIds)
-
-                    val allDeletedSlots = remoteDeletedSlotIds + getDeletedIds("slot")
-                    val allDeletedBookings = remoteDeletedBookingIds + getDeletedIds("booking")
-                    val allDeletedStudents = remoteDeletedStudentIds + getDeletedIds("student")
-
-                    // Apply deletions to local Room
-                    for (delId in allDeletedSlots) {
-                        dao.deleteSlotById(delId)
-                    }
-                    for (delId in allDeletedBookings) {
-                        dao.deleteBookingById(delId)
-                    }
-                    for (delId in allDeletedStudents) {
-                        dao.deleteStudentById(delId)
-                    }
-
-                    // Parse and upsert remote slots
-                    val remoteSlots = mutableListOf<LessonSlotEntity>()
-                    val remoteSlotIds = mutableSetOf<Long>()
-                    for (i in 0 until remoteSlotsArray.length()) {
-                        val s = remoteSlotsArray.getJSONObject(i)
-                        val id = s.optLong("id")
-                        remoteSlotIds.add(id)
-                        if (id !in allDeletedSlots) {
-                            remoteSlots.add(
-                                LessonSlotEntity(
-                                    id = id,
-                                    dateIso = s.optString("dateIso"),
-                                    startTime = s.optString("startTime"),
-                                    endTime = s.optString("endTime"),
-                                    title = s.optString("title"),
-                                    lessonType = s.optString("lessonType", "GONFLAGE"),
-                                    location = s.optString("location"),
-                                    maxCapacity = s.optInt("maxCapacity", 4),
-                                    notes = s.optString("notes"),
-                                    isCancelled = s.optBoolean("isCancelled", false),
-                                    createdAt = s.optLong("createdAt", System.currentTimeMillis())
-                                )
-                            )
-                        }
-                    }
-
-                    // Parse and upsert remote students
-                    val remoteStudents = mutableListOf<StudentEntity>()
-                    val remoteStudentIds = mutableSetOf<Long>()
-                    for (i in 0 until remoteStudentsArray.length()) {
-                        val st = remoteStudentsArray.getJSONObject(i)
-                        val id = st.optLong("id")
-                        remoteStudentIds.add(id)
-                        if (id !in allDeletedStudents) {
-                            remoteStudents.add(
-                                StudentEntity(
-                                    id = id,
-                                    firstName = st.optString("firstName"),
-                                    lastName = st.optString("lastName"),
-                                    phone = st.optString("phone"),
-                                    email = st.optString("email"),
-                                    level = st.optString("level", "Gonflage"),
-                                    notes = st.optString("notes"),
-                                    completedSessions = st.optInt("completedSessions", 0),
-                                    createdAt = st.optLong("createdAt", System.currentTimeMillis())
-                                )
-                            )
-                        }
-                    }
-
-                    // Parse and upsert remote bookings
-                    val remoteBookings = mutableListOf<BookingEntity>()
-                    val remoteBookingIds = mutableSetOf<Long>()
-                    for (i in 0 until remoteBookingsArray.length()) {
-                        val b = remoteBookingsArray.getJSONObject(i)
-                        val id = b.optLong("id")
-                        remoteBookingIds.add(id)
-                        if (id !in allDeletedBookings) {
-                            remoteBookings.add(
-                                BookingEntity(
-                                    id = id,
-                                    slotId = b.optLong("slotId"),
-                                    studentId = b.optLong("studentId"),
-                                    registeredAt = b.optLong("registeredAt", System.currentTimeMillis()),
-                                    isWaitingList = b.optBoolean("isWaitingList", false),
-                                    attended = b.optBoolean("attended", false)
-                                )
-                            )
-                        }
-                    }
-
-                    if (remoteSlots.isNotEmpty()) dao.insertSlots(remoteSlots)
-                    if (remoteStudents.isNotEmpty()) dao.insertStudents(remoteStudents)
-                    if (remoteBookings.isNotEmpty()) dao.insertBookings(remoteBookings)
-
-                    // Check if local database had slots/students/bookings not yet on the cloud
-                    val localUnsyncedSlots = localSlots.filter { it.id !in remoteSlotIds && it.id !in allDeletedSlots }
-                    val localUnsyncedStudents = localStudents.filter { it.id !in remoteStudentIds && it.id !in allDeletedStudents }
-                    val localUnsyncedBookings = localBookings.filter { it.id !in remoteBookingIds && it.id !in allDeletedBookings }
-
-                    if (localUnsyncedSlots.isNotEmpty() || localUnsyncedStudents.isNotEmpty() || localUnsyncedBookings.isNotEmpty()) {
-                        hasLocalNewData = true
-                    }
-                } else {
-                    // Cloud document was empty or unreachable
-                    if (localSlots.isNotEmpty() || localStudents.isNotEmpty() || localBookings.isNotEmpty()) {
-                        hasLocalNewData = true
-                    }
-                }
-
-                // 3. If local has newer items not present in the cloud, or force requested, write back the merged snapshot
-                if (hasLocalNewData || forcePushMerged) {
-                    pushSnapshotToCloud()
+                if (hasNewLocalData || forcePushMerged) {
+                    pushSnapshotToCloudInternal()
                 }
 
                 _syncStatus.value = SyncStatus.CONNECTED_SYNCED
@@ -379,28 +292,160 @@ class CloudSyncManager(
         }
     }
 
+    private suspend fun mergeSnapshotIntoLocalDb(remoteJson: JSONObject?): Boolean {
+        val localSlots = dao.getAllSlotsList()
+        val localStudents = dao.getAllStudentsList()
+        val localBookings = dao.getAllBookingsList()
+
+        if (remoteJson == null) {
+            // No remote state found; local data is brand new
+            return localSlots.isNotEmpty() || localStudents.isNotEmpty() || localBookings.isNotEmpty()
+        }
+
+        val remoteSlotsArray = remoteJson.optJSONArray("slots") ?: JSONArray()
+        val remoteStudentsArray = remoteJson.optJSONArray("students") ?: JSONArray()
+        val remoteBookingsArray = remoteJson.optJSONArray("bookings") ?: JSONArray()
+        val deletedSlotsArray = remoteJson.optJSONArray("deletedSlotIds") ?: JSONArray()
+        val deletedBookingsArray = remoteJson.optJSONArray("deletedBookingIds") ?: JSONArray()
+        val deletedStudentsArray = remoteJson.optJSONArray("deletedStudentIds") ?: JSONArray()
+
+        val remoteDeletedSlotIds = mutableSetOf<Long>()
+        for (i in 0 until deletedSlotsArray.length()) {
+            remoteDeletedSlotIds.add(deletedSlotsArray.getLong(i))
+        }
+
+        val remoteDeletedBookingIds = mutableSetOf<Long>()
+        for (i in 0 until deletedBookingsArray.length()) {
+            remoteDeletedBookingIds.add(deletedBookingsArray.getLong(i))
+        }
+
+        val remoteDeletedStudentIds = mutableSetOf<Long>()
+        for (i in 0 until deletedStudentsArray.length()) {
+            remoteDeletedStudentIds.add(deletedStudentsArray.getLong(i))
+        }
+
+        saveRemoteDeletedIds(remoteDeletedSlotIds, remoteDeletedBookingIds, remoteDeletedStudentIds)
+
+        val allDeletedSlots = remoteDeletedSlotIds + getDeletedIds("slot")
+        val allDeletedBookings = remoteDeletedBookingIds + getDeletedIds("booking")
+        val allDeletedStudents = remoteDeletedStudentIds + getDeletedIds("student")
+
+        // 1. Apply deletions to local Room
+        for (delId in allDeletedSlots) {
+            dao.deleteSlotById(delId)
+        }
+        for (delId in allDeletedBookings) {
+            dao.deleteBookingById(delId)
+        }
+        for (delId in allDeletedStudents) {
+            dao.deleteStudentById(delId)
+        }
+
+        // 2. Parse and upsert remote slots
+        val remoteSlots = mutableListOf<LessonSlotEntity>()
+        val remoteSlotIds = mutableSetOf<Long>()
+        for (i in 0 until remoteSlotsArray.length()) {
+            val s = remoteSlotsArray.getJSONObject(i)
+            val id = s.optLong("id")
+            remoteSlotIds.add(id)
+            if (id !in allDeletedSlots) {
+                remoteSlots.add(
+                    LessonSlotEntity(
+                        id = id,
+                        dateIso = s.optString("dateIso"),
+                        startTime = s.optString("startTime"),
+                        endTime = s.optString("endTime"),
+                        title = s.optString("title"),
+                        lessonType = s.optString("lessonType", "GONFLAGE"),
+                        location = s.optString("location"),
+                        maxCapacity = s.optInt("maxCapacity", 4),
+                        notes = s.optString("notes"),
+                        isCancelled = s.optBoolean("isCancelled", false),
+                        createdAt = s.optLong("createdAt", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+
+        // 3. Parse and upsert remote students
+        val remoteStudents = mutableListOf<StudentEntity>()
+        val remoteStudentIds = mutableSetOf<Long>()
+        for (i in 0 until remoteStudentsArray.length()) {
+            val st = remoteStudentsArray.getJSONObject(i)
+            val id = st.optLong("id")
+            remoteStudentIds.add(id)
+            if (id !in allDeletedStudents) {
+                remoteStudents.add(
+                    StudentEntity(
+                        id = id,
+                        firstName = st.optString("firstName"),
+                        lastName = st.optString("lastName"),
+                        phone = st.optString("phone"),
+                        email = st.optString("email"),
+                        level = st.optString("level", "Gonflage"),
+                        notes = st.optString("notes"),
+                        completedSessions = st.optInt("completedSessions", 0),
+                        createdAt = st.optLong("createdAt", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+
+        // 4. Parse and upsert remote bookings
+        val remoteBookings = mutableListOf<BookingEntity>()
+        val remoteBookingIds = mutableSetOf<Long>()
+        for (i in 0 until remoteBookingsArray.length()) {
+            val b = remoteBookingsArray.getJSONObject(i)
+            val id = b.optLong("id")
+            remoteBookingIds.add(id)
+            if (id !in allDeletedBookings) {
+                remoteBookings.add(
+                    BookingEntity(
+                        id = id,
+                        slotId = b.optLong("slotId"),
+                        studentId = b.optLong("studentId"),
+                        registeredAt = b.optLong("registeredAt", System.currentTimeMillis()),
+                        isWaitingList = b.optBoolean("isWaitingList", false),
+                        attended = b.optBoolean("attended", false)
+                    )
+                )
+            }
+        }
+
+        if (remoteSlots.isNotEmpty()) dao.insertSlots(remoteSlots)
+        if (remoteStudents.isNotEmpty()) dao.insertStudents(remoteStudents)
+        if (remoteBookings.isNotEmpty()) dao.insertBookings(remoteBookings)
+
+        // Check if local database has items that were not yet in the remote snapshot
+        val localUnsyncedSlots = localSlots.filter { it.id !in remoteSlotIds && it.id !in allDeletedSlots }
+        val localUnsyncedStudents = localStudents.filter { it.id !in remoteStudentIds && it.id !in allDeletedStudents }
+        val localUnsyncedBookings = localBookings.filter { it.id !in remoteBookingIds && it.id !in allDeletedBookings }
+
+        return localUnsyncedSlots.isNotEmpty() || localUnsyncedStudents.isNotEmpty() || localUnsyncedBookings.isNotEmpty()
+    }
+
     /**
-     * Immediate or debounced push to Cloud
+     * Push full snapshot to Cloud immediately or debounced
      */
     fun pushFullSync(immediate: Boolean = false) {
         if (immediate) {
             scope.launch(Dispatchers.IO) {
                 syncMutex.withLock {
-                    pushSnapshotToCloud()
+                    pushSnapshotToCloudInternal()
                 }
             }
         } else {
             pendingPushJob?.cancel()
             pendingPushJob = scope.launch(Dispatchers.IO) {
-                delay(100)
+                delay(80)
                 syncMutex.withLock {
-                    pushSnapshotToCloud()
+                    pushSnapshotToCloudInternal()
                 }
             }
         }
     }
 
-    private suspend fun pushSnapshotToCloud() {
+    private suspend fun pushSnapshotToCloudInternal() {
         try {
             val slots = dao.getAllSlotsList()
             val students = dao.getAllStudentsList()
@@ -468,56 +513,44 @@ class CloudSyncManager(
             val deletedStudentsJson = JSONArray()
             deletedStudentIds.forEach { deletedStudentsJson.put(it) }
 
-            val dataJson = JSONObject()
-            dataJson.put("version", 4)
-            dataJson.put("senderId", myDeviceId)
-            dataJson.put("lastUpdated", System.currentTimeMillis())
-            dataJson.put("slots", slotsArray)
-            dataJson.put("students", studentsArray)
-            dataJson.put("bookings", bookingsArray)
-            dataJson.put("deletedSlotIds", deletedSlotsJson)
-            dataJson.put("deletedBookingIds", deletedBookingsJson)
-            dataJson.put("deletedStudentIds", deletedStudentsJson)
+            val payload = JSONObject()
+            payload.put("version", 5)
+            payload.put("senderId", myDeviceId)
+            payload.put("lastUpdated", System.currentTimeMillis())
+            payload.put("slots", slotsArray)
+            payload.put("students", studentsArray)
+            payload.put("bookings", bookingsArray)
+            payload.put("deletedSlotIds", deletedSlotsJson)
+            payload.put("deletedBookingIds", deletedBookingsJson)
+            payload.put("deletedStudentIds", deletedStudentsJson)
 
-            // 1. Write authoritative payload to REST storage
-            val restPayload = JSONObject()
-            restPayload.put("name", "Planning Paramoteur")
-            restPayload.put("data", dataJson)
+            val payloadString = payload.toString()
 
-            val restBody = restPayload.toString().toRequestBody(JSON_MEDIA_TYPE)
+            // 1. Upload persistent attachment snapshot (cached on NTFY server for 12+ hours)
+            val putBody = payloadString.toRequestBody("application/json; charset=utf-8".toMediaType())
             val putReq = Request.Builder()
-                .url(REST_URL)
-                .put(restBody)
-                .build()
-
-            var restResp = client.newCall(putReq).execute()
-            if (restResp.code == 404) {
-                restResp.close()
-                val postReq = Request.Builder()
-                    .url(REST_CREATE_URL)
-                    .post(restBody)
-                    .build()
-                restResp = client.newCall(postReq).execute()
-            }
-            restResp.close()
-
-            // 2. Broadcast instant real-time sync signal to NTFY
-            val broadcastSignal = JSONObject()
-            broadcastSignal.put("action", "sync")
-            broadcastSignal.put("senderId", myDeviceId)
-            broadcastSignal.put("timestamp", System.currentTimeMillis())
-            broadcastSignal.put("slotCount", slotsArray.length())
-            broadcastSignal.put("bookingCount", bookingsArray.length())
-
-            val ntfyBody = broadcastSignal.toString().toRequestBody("text/plain; charset=utf-8".toMediaType())
-            val ntfyReq = Request.Builder()
                 .url(NTFY_BASE_URL)
-                .addHeader("Title", "CloudSync")
+                .addHeader("Filename", "sync.json")
+                .addHeader("Title", "ParamoteurSync")
                 .addHeader("Tags", "cloud,sync")
-                .post(ntfyBody)
+                .put(putBody)
                 .build()
-            val ntfyResp = client.newCall(ntfyReq).execute()
-            ntfyResp.close()
+
+            val putResp = httpClient.newCall(putReq).execute()
+            putResp.close()
+
+            // 2. If payload fits directly in inline message (< 3800 bytes), also POST inline message for instant SSE parsing
+            if (payloadString.length < 3800) {
+                val postBody = payloadString.toRequestBody("text/plain; charset=utf-8".toMediaType())
+                val postReq = Request.Builder()
+                    .url(NTFY_BASE_URL)
+                    .addHeader("Title", "ParamoteurSyncDirect")
+                    .addHeader("Tags", "sync")
+                    .post(postBody)
+                    .build()
+                val postResp = httpClient.newCall(postReq).execute()
+                postResp.close()
+            }
 
             _syncStatus.value = SyncStatus.CONNECTED_SYNCED
             _statusMessage.value = "Synchronisé en direct"
@@ -525,7 +558,7 @@ class CloudSyncManager(
             _lastSyncTime.value = timeFormat.format(Date())
 
         } catch (e: Exception) {
-            Log.e(TAG, "pushSnapshotToCloud error: ${e.message}", e)
+            Log.e(TAG, "pushSnapshotToCloudInternal error: ${e.message}", e)
         }
     }
 
