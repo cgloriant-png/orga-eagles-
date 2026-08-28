@@ -141,7 +141,10 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun forceSync() {
-        cloudSyncManager.forceSyncNow()
+        viewModelScope.launch {
+            cloudSyncManager.forceSyncNow()
+            _feedbackMessage.emit("🔄 Synchronisation Cloud effectuée")
+        }
     }
 
     fun saveDefaultStandardDayConfig(config: StandardDayConfig) {

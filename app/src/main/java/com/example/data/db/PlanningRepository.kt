@@ -234,7 +234,7 @@ class PlanningRepository(
 
         val createdSlots = slotsToCreate.map { it.copy(id = generateUniqueId()) }
         planningDao.insertSlots(createdSlots)
-        cloudSyncManager?.pushFullSync()
+        cloudSyncManager?.pushFullSync(immediate = true)
         return createdSlots.map { it.id }
     }
 
@@ -288,7 +288,7 @@ class PlanningRepository(
         val isSlotFull = bookings.filter { !it.isWaitingList }.size >= (slot?.maxCapacity ?: 4)
 
         val enrolled = enrollStudent(slotId, student.id, isWaitingList = isSlotFull)
-        cloudSyncManager?.pushFullSync()
+        cloudSyncManager?.pushFullSync(immediate = true)
         return Pair(student, enrolled)
     }
 
