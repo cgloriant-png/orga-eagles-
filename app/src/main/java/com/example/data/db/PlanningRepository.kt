@@ -27,10 +27,16 @@ class PlanningRepository(
         val bookingBySlotId = bookings.groupBy { it.slotId }
 
         slots.map { slot ->
-            val slotBookings = bookingBySlotId[slot.id].orEmpty().mapNotNull { booking ->
-                studentMap[booking.studentId]?.let { student ->
-                    BookingWithStudent(booking, student)
-                }
+            val slotBookings = bookingBySlotId[slot.id].orEmpty().map { booking ->
+                val student = studentMap[booking.studentId] ?: StudentEntity(
+                    id = booking.studentId,
+                    firstName = "Élève",
+                    lastName = "",
+                    phone = "",
+                    email = "",
+                    level = "Gonflage"
+                )
+                BookingWithStudent(booking, student)
             }
             SlotWithBookings(slot, slotBookings)
         }

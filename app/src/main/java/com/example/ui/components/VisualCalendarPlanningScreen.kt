@@ -988,13 +988,13 @@ fun MonthDayCell(
         border = BorderStroke(if (isToday) 2.dp else 1.dp, borderColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = modifier
-            .aspectRatio(0.85f)
+            .height(64.dp)
             .clickable { onClick() }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(4.dp),
+                .padding(horizontal = 3.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -1028,44 +1028,32 @@ fun MonthDayCell(
                 val isFull = status == DayColorStatus.RED_FULL || (totalCapacity > 0 && totalEnrolled >= totalCapacity)
 
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(5.dp),
                     color = if (isFull) Color(0xFFFEE2E2) else if (totalEnrolled > 0) Color(0xFFEFF6FF) else Color(0xFFF0FDF4),
                     border = BorderStroke(
-                        1.dp,
-                        if (isFull) Color(0xFFEF4444).copy(alpha = 0.6f) else if (totalEnrolled > 0) PrimaryBlue.copy(alpha = 0.6f) else GreenSuccess.copy(alpha = 0.6f)
+                        0.5.dp,
+                        if (isFull) Color(0xFFEF4444) else if (totalEnrolled > 0) PrimaryBlue else GreenSuccess
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 2.dp, vertical = 3.dp),
+                        modifier = Modifier.padding(horizontal = 1.dp, vertical = 2.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = null,
-                            modifier = Modifier.size(11.dp),
-                            tint = if (isFull) RedAlertText else if (totalEnrolled > 0) PrimaryBlue else GreenSuccess
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
                         Text(
-                            text = "$totalEnrolled",
-                            fontSize = 11.sp,
+                            text = if (totalCapacity > 0) "👤 $totalEnrolled/$totalCapacity" else "👤 $totalEnrolled",
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Black,
-                            color = if (isFull) RedAlertText else if (totalEnrolled > 0) PrimaryBlue else GreenSuccess
+                            color = if (isFull) RedAlertText else if (totalEnrolled > 0) PrimaryBlue else GreenSuccess,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
                         )
-                        if (totalCapacity > 0) {
-                            Text(
-                                text = "/$totalCapacity",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isFull) RedAlertText.copy(alpha = 0.7f) else SecondaryText
-                            )
-                        }
                     }
                 }
             } else {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(6.dp))
             }
         }
     }

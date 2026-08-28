@@ -41,8 +41,17 @@ class CloudSyncManager(
     // Multi-tier cloud endpoints for maximum reliability
     private val NTFY_TOPIC = "paramoteur_planning_live_v4"
     private val NTFY_BASE_URL = "https://ntfy.sh/$NTFY_TOPIC"
-    private val REST_BACKUP_URL = "https://api.restful-api.dev/objects/ff8081819ff5b11001a043d6d4743921"
+    private val DEFAULT_REST_ID = "ff8081819ff5b11001a047bac4454644"
     private val REST_CREATE_URL = "https://api.restful-api.dev/objects"
+
+    private fun getRestUrl(): String {
+        val id = prefs.getString("rest_obj_id", DEFAULT_REST_ID) ?: DEFAULT_REST_ID
+        return "https://api.restful-api.dev/objects/$id"
+    }
+
+    private fun saveRestId(id: String) {
+        prefs.edit().putString("rest_obj_id", id).apply()
+    }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
@@ -110,6 +119,19 @@ class CloudSyncManager(
         startSyncLoops()
     }
 
+    private fun fetchPayloadFromUrl(url: String): String? {
+        return try {
+            val req = Request.Builder().url(url).build()
+            val resp = client.newCall(req).execute()
+            val body = if (resp.isSuccessful) resp.body?.string() else null
+            resp.close()
+            body
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchPayloadFromUrl error: ${e.message}")
+            null
+        }
+    }
+
     private fun startSyncLoops() {
         // 1. Initial immediate sync + periodic poll loop every 5 seconds
         syncJob?.cancel()
@@ -118,7 +140,7 @@ class CloudSyncManager(
             syncFromCloud()
 
             while (isActive) {
-                delay(5000)
+                delay(4000)
                 try {
                     syncFromCloud()
                 } catch (e: Exception) {
@@ -147,12 +169,20 @@ class CloudSyncManager(
                                 try {
                                     val ntfyObj = JSONObject(dataContent)
                                     val messageString = ntfyObj.optString("message", "")
+                                    val attachObj = ntfyObj.optJSONObject("attachment")
+                                    val attachUrl = attachObj?.optString("url")
+
                                     if (messageString.startsWith("{") && messageString.contains("slots")) {
-                                        // Directly process the full JSON payload broadcasted
                                         val payloadObj = JSONObject(messageString)
                                         processRemoteJsonPayload(payloadObj)
+                                    } else if (!attachUrl.isNullOrBlank()) {
+                                        val attachPayload = fetchPayloadFromUrl(attachUrl)
+                                        if (!attachPayload.isNullOrBlank() && attachPayload.startsWith("{")) {
+                                            processRemoteJsonPayload(JSONObject(attachPayload))
+                                        } else {
+                                            syncFromCloud()
+                                        }
                                     } else {
-                                        // Refresh from cloud
                                         syncFromCloud()
                                     }
                                 } catch (e: Exception) {
@@ -199,7 +229,6 @@ class CloudSyncManager(
                 if (ntfyResp.isSuccessful) {
                     val respText = ntfyResp.body?.string() ?: ""
                     ntfyResp.close()
-                    // NTFY /json returns lines of messages. Read the last message
                     val lines = respText.lines().filter { it.isNotBlank() }
                     for (i in lines.indices.reversed()) {
                         try {
@@ -208,6 +237,15 @@ class CloudSyncManager(
                             if (msgBody.startsWith("{") && (msgBody.contains("slots") || msgBody.contains("students"))) {
                                 jsonString = msgBody
                                 break
+                            }
+                            val attachObj = msgObj.optJSONObject("attachment")
+                            val attachUrl = attachObj?.optString("url")
+                            if (!attachUrl.isNullOrBlank()) {
+                                val fetched = fetchPayloadFromUrl(attachUrl)
+                                if (!fetched.isNullOrBlank() && fetched.startsWith("{") && (fetched.contains("slots") || fetched.contains("students"))) {
+                                    jsonString = fetched
+                                    break
+                                }
                             }
                         } catch (_: Exception) {}
                     }
@@ -222,7 +260,7 @@ class CloudSyncManager(
             if (jsonString == null) {
                 try {
                     val restReq = Request.Builder()
-                        .url(REST_BACKUP_URL)
+                        .url(getRestUrl())
                         .get()
                         .build()
                     val restResp = client.newCall(restReq).execute()
@@ -521,7 +559,7 @@ class CloudSyncManager(
 
                 val restBody = restPayload.toString().toRequestBody(JSON_MEDIA_TYPE)
                 val putReq = Request.Builder()
-                    .url(REST_BACKUP_URL)
+                    .url(getRestUrl())
                     .put(restBody)
                     .build()
                 var restResp = client.newCall(putReq).execute()
@@ -532,6 +570,16 @@ class CloudSyncManager(
                         .post(restBody)
                         .build()
                     restResp = client.newCall(postReq).execute()
+                    if (restResp.isSuccessful) {
+                        val createdText = restResp.body?.string() ?: ""
+                        if (createdText.isNotBlank()) {
+                            val createdObj = JSONObject(createdText)
+                            val newId = createdObj.optString("id", "")
+                            if (newId.isNotBlank()) {
+                                saveRestId(newId)
+                            }
+                        }
+                    }
                 }
                 restResp.close()
             } catch (e: Exception) {
