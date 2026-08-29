@@ -35,7 +35,9 @@ fun DayDetailSheet(
     onUnenrollStudent: (Long, Long) -> Unit,
     onToggleAttendance: (Long, Long, Boolean) -> Unit,
     onEditSlot: (LessonSlotEntity) -> Unit,
-    onDeleteSlot: (Long) -> Unit
+    onDeleteSlot: (Long) -> Unit,
+    onOpenWeatherAlert: ((SlotWithBookings) -> Unit)? = null,
+    onAddToCalendar: ((LessonSlotEntity) -> Unit)? = null
 ) {
     val dateIn = remember { SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE) }
     val dateOut = remember { SimpleDateFormat("EEEE d MMMM yyyy", Locale.FRANCE) }
@@ -209,7 +211,9 @@ fun DayDetailSheet(
                             onUnenrollStudent = onUnenrollStudent,
                             onToggleAttendance = onToggleAttendance,
                             onEditSlot = onEditSlot,
-                            onDeleteSlot = onDeleteSlot
+                            onDeleteSlot = onDeleteSlot,
+                            onOpenWeatherAlert = { onOpenWeatherAlert?.invoke(it) },
+                            onAddToCalendar = { onAddToCalendar?.invoke(it) }
                         )
                     }
                 }

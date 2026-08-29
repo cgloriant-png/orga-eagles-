@@ -16,6 +16,7 @@ class PlanningRepository(
     val allStudents: Flow<List<StudentEntity>> = planningDao.getAllStudents()
     val allSlots: Flow<List<LessonSlotEntity>> = planningDao.getAllSlots()
     val allBookings: Flow<List<BookingEntity>> = planningDao.getAllBookings()
+    val allProgress: Flow<List<StudentProgressEntity>> = planningDao.getAllStudentProgress()
 
     // Combined Flow: Slots with enrolled students
     val slotsWithBookings: Flow<List<SlotWithBookings>> = combine(
@@ -70,6 +71,34 @@ class PlanningRepository(
                 bookingHistory = history
             )
         }
+    }
+
+    // --- Student Progress & Livret FFPLUM ---
+    suspend fun getStudentProgress(studentId: Long): StudentProgressEntity {
+        return planningDao.getStudentProgressSync(studentId) ?: StudentProgressEntity(studentId = studentId)
+    }
+
+    suspend fun saveStudentProgress(progress: StudentProgressEntity) {
+        planningDao.insertOrUpdateProgress(progress.copy(lastUpdated = System.currentTimeMillis()))
+        cloudSyncManager?.pushFullSync(immediate = true)
+    }
+
+    suspend fun updateSlotWeatherAlert(
+        slotId: Long,
+        isCancelled: Boolean,
+        weatherAlert: String,
+        cancelReason: String = "",
+        postponedTo: String = ""
+    ) {
+        val slot = planningDao.getSlotById(slotId) ?: return
+        val updated = slot.copy(
+            isCancelled = isCancelled,
+            weatherAlert = weatherAlert,
+            cancelReason = cancelReason,
+            postponedTo = postponedTo
+        )
+        planningDao.updateSlot(updated)
+        cloudSyncManager?.pushSlot(updated)
     }
 
     private fun generateUniqueId(): Long {
@@ -153,6 +182,52 @@ class PlanningRepository(
             cloudSyncManager?.deleteBooking(b.id)
         }
         planningDao.deleteBookingBySlotAndStudent(slotId, studentId)
+        cloudSyncManager?.pushFullSync(immediate = true)
+    }
+
+    suspend fun saveOrUpdateStudentProfile(
+        firstName: String,
+        lastName: String,
+        phone: String,
+        level: String
+    ): StudentEntity {
+        val cleanPhone = phone.trim()
+        val cleanFirst = firstName.trim()
+        val cleanLast = lastName.trim()
+
+        var student = if (cleanPhone.isNotBlank()) {
+            planningDao.findStudentByPhone(cleanPhone)
+        } else null
+
+        if (student == null && cleanFirst.isNotBlank() && cleanLast.isNotBlank()) {
+            student = planningDao.findStudentByName(cleanFirst, cleanLast)
+        }
+
+        if (student == null) {
+            val newStudent = StudentEntity(
+                id = generateUniqueId(),
+                firstName = cleanFirst.ifBlank { "Élève" },
+                lastName = cleanLast,
+                phone = cleanPhone,
+                email = "",
+                level = level.ifBlank { "Gonflage" },
+                notes = "Inscrit via Espace Élève"
+            )
+            planningDao.insertStudent(newStudent)
+            student = newStudent
+        } else {
+            val updated = student.copy(
+                firstName = cleanFirst.ifBlank { student.firstName },
+                lastName = cleanLast.ifBlank { student.lastName },
+                phone = cleanPhone.ifBlank { student.phone },
+                level = level.ifBlank { student.level }
+            )
+            planningDao.updateStudent(updated)
+            student = updated
+        }
+
+        cloudSyncManager?.pushFullSync(immediate = true)
+        return student
     }
 
     suspend fun toggleAttendance(bookingId: Long, studentId: Long, attended: Boolean) {
@@ -392,5 +467,55 @@ class PlanningRepository(
 
         sb.append("👉 Contactez-moi pour réserver votre créneau !")
         return sb.toString()
+    }
+
+    fun generateWeatherAlertWhatsAppText(
+        slot: LessonSlotEntity,
+        enrolledStudents: List<StudentEntity>
+    ): String {
+        val dateIn = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE)
+        val dateOut = SimpleDateFormat("EEEE d MMMM yyyy", Locale.FRANCE)
+        val formattedDate = try {
+            dateIn.parse(slot.dateIso)?.let { dateOut.format(it).replaceFirstChar { c -> c.uppercase() } } ?: slot.dateIso
+        } catch (e: Exception) {
+            slot.dateIso
+        }
+        val type = PlanningLessonType.fromCode(slot.lessonType)
+        val timeRange = formatTimeRangeFrench(slot.startTime, slot.endTime)
+
+        val statusHeader = if (slot.isCancelled) {
+            "🚫 *ANNULATION DE CRÉNEAU - AÉROLOGIE DÉFAVORABLE* 🚫"
+        } else {
+            "⚠️ *ALERTE MÉTÉO / AÉROLOGIE SOUS RÉSERVE* ⚠️"
+        }
+
+        val reasonText = if (slot.cancelReason.isNotBlank()) slot.cancelReason else if (slot.weatherAlert.isNotBlank()) slot.weatherAlert else "Conditions aérologiques non sécurisées"
+
+        val namesList = if (enrolledStudents.isNotEmpty()) {
+            "👥 *Élèves concernés :* " + enrolledStudents.joinToString(", ") { it.firstName }
+        } else ""
+
+        val postponedText = if (slot.postponedTo.isNotBlank()) {
+            "\n🔁 *Report proposé :* ${slot.postponedTo}"
+        } else ""
+
+        return """
+            $statusHeader
+            
+            Bonjour à tous !
+            
+            📅 *Date* : $formattedDate
+            ⏰ *Horaire* : $timeRange
+            ${type.emoji} *Séance* : ${type.label} (${slot.title})
+            📍 *Lieu* : ${slot.location}
+            
+            🌪️ *Motif aérologique :*
+            $reasonText
+            $postponedText
+            
+            $namesList
+            
+            ${if (slot.isCancelled) "Pour votre sécurité, la séance est annulée. Nous vous tiendrons informés du prochain créneau praticable !" else "Nous surveillons l'évolution de la brise et du gradient avant le départ."}
+        """.trimIndent()
     }
 }

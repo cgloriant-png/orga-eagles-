@@ -27,6 +27,7 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     val allStudents: StateFlow<List<StudentEntity>>
     val slotsWithBookings: StateFlow<List<SlotWithBookings>>
     val studentsWithStats: StateFlow<List<StudentWithStats>>
+    val allProgress: StateFlow<List<StudentProgressEntity>>
 
     // App Mode: true = Version Élève (par défaut pour les nouveaux utilisateurs), false = Mode Moniteur
     private val prefs = application.getSharedPreferences("paramoteur_planning_prefs", android.content.Context.MODE_PRIVATE)
@@ -112,6 +113,9 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
         studentsWithStats = repository.studentsWithStats
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        allProgress = repository.allProgress
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
     fun toggleAppMode() {
@@ -171,6 +175,13 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
             .putString("student_phone", profile.phone)
             .putString("student_level", profile.level)
             .apply()
+
+        viewModelScope.launch {
+            if (profile.firstName.isNotBlank() || profile.phone.isNotBlank()) {
+                repository.saveOrUpdateStudentProfile(profile.firstName, profile.lastName, profile.phone, profile.level)
+                _feedbackMessage.emit("Profil synchronisé avec l'école")
+            }
+        }
     }
 
     fun setDateFilter(filter: String?) {
@@ -429,5 +440,99 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
     fun getWhatsAppText(): String {
         return repository.generateWhatsAppPlanningText(slotsWithBookings.value)
+    }
+
+    // --- Weather Alerts & Slot Cancellations ---
+    fun updateSlotWeather(
+        slot: LessonSlotEntity,
+        enrolledStudents: List<StudentEntity>,
+        isCancelled: Boolean,
+        weatherAlert: String,
+        cancelReason: String,
+        postponedTo: String,
+        broadcastNotification: Boolean = true
+    ) {
+        viewModelScope.launch {
+            repository.updateSlotWeatherAlert(
+                slotId = slot.id,
+                isCancelled = isCancelled,
+                weatherAlert = weatherAlert,
+                cancelReason = cancelReason,
+                postponedTo = postponedTo
+            )
+
+            if (broadcastNotification && (isCancelled || weatherAlert.isNotBlank())) {
+                val reason = if (cancelReason.isNotBlank()) cancelReason else weatherAlert
+                com.example.util.WeatherNotificationHelper.showWeatherAlertNotification(
+                    context = getApplication(),
+                    slot = slot.copy(
+                        isCancelled = isCancelled,
+                        weatherAlert = weatherAlert,
+                        cancelReason = cancelReason,
+                        postponedTo = postponedTo
+                    ),
+                    isCancellation = isCancelled,
+                    reason = reason
+                )
+            }
+
+            val msg = if (isCancelled) "🚫 Séance annulée pour cause météo" else if (weatherAlert.isNotBlank()) "⚠️ Alerte météo enregistrée" else "Créneau rétabli"
+            _feedbackMessage.emit(msg)
+        }
+    }
+
+    fun generateWeatherAlertWhatsApp(slot: LessonSlotEntity, enrolledStudents: List<StudentEntity>): String {
+        return repository.generateWeatherAlertWhatsAppText(slot, enrolledStudents)
+    }
+
+    // --- Student Progress Operations ---
+    fun saveStudentProgress(progress: StudentProgressEntity) {
+        viewModelScope.launch {
+            repository.saveStudentProgress(progress)
+            _feedbackMessage.emit("Progression et livret FFPLUM mis à jour !")
+        }
+    }
+
+    fun getStudentProgressFor(studentId: Long): StudentProgressEntity {
+        return allProgress.value.find { it.studentId == studentId } ?: StudentProgressEntity(studentId = studentId)
+    }
+
+    // --- Calendar & PDF Exports ---
+    fun addSlotToCalendar(slot: LessonSlotEntity) {
+        com.example.util.CalendarExportUtils.addSlotToGoogleCalendar(getApplication(), slot)
+    }
+
+    fun exportPlanningIcs() {
+        com.example.util.CalendarExportUtils.exportSlotsToIcs(
+            context = getApplication(),
+            slotsWithBookings = slotsWithBookings.value,
+            exportTitle = "Planning_Paramoteur"
+        )
+    }
+
+    fun exportPlanningPdf() {
+        com.example.util.PdfExportUtils.exportPlanningPdf(
+            context = getApplication(),
+            slotsWithBookings = slotsWithBookings.value,
+            periodTitle = "Planning École Paramoteur"
+        )
+    }
+
+    fun exportStudentBookletPdf(student: StudentEntity) {
+        val progress = getStudentProgressFor(student.id)
+        com.example.util.PdfExportUtils.exportStudentBookletPdf(
+            context = getApplication(),
+            student = student,
+            progress = progress
+        )
+    }
+
+    fun exportStudentBookletIcs(student: StudentEntity) {
+        val studentSlots = slotsWithBookings.value.filter { it.enrolledStudentIds.contains(student.id) }
+        com.example.util.CalendarExportUtils.exportSlotsToIcs(
+            context = getApplication(),
+            slotsWithBookings = studentSlots,
+            exportTitle = "Seances_${student.firstName}_${student.lastName}"
+        )
     }
 }

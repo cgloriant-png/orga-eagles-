@@ -57,7 +57,9 @@ fun VisualCalendarPlanningScreen(
     onToggleAttendance: ((Long, Long, Boolean) -> Unit)? = null,
     onEditSlot: ((LessonSlotEntity) -> Unit)? = null,
     onDeleteSlot: ((Long) -> Unit)? = null,
-    onOpenStandardDayForDate: ((String) -> Unit)? = null
+    onOpenStandardDayForDate: ((String) -> Unit)? = null,
+    onOpenWeatherAlert: ((SlotWithBookings) -> Unit)? = null,
+    onAddToCalendar: ((SlotWithBookings) -> Unit)? = null
 ) {
     var viewMode by remember { mutableStateOf(PlanningViewMode.SEMAINE) }
     val todayCal = Calendar.getInstance()
@@ -302,7 +304,9 @@ fun VisualCalendarPlanningScreen(
                         onUnenrollStudent = onUnenrollStudent,
                         onToggleAttendance = onToggleAttendance,
                         onEditSlot = onEditSlot,
-                        onDeleteSlot = onDeleteSlot
+                        onDeleteSlot = onDeleteSlot,
+                        onOpenWeatherAlert = onOpenWeatherAlert,
+                        onAddToCalendar = onAddToCalendar
                     )
                 }
 
@@ -374,7 +378,9 @@ fun DayOrganizerView(
     onUnenrollStudent: ((Long, Long) -> Unit)?,
     onToggleAttendance: ((Long, Long, Boolean) -> Unit)?,
     onEditSlot: ((LessonSlotEntity) -> Unit)?,
-    onDeleteSlot: ((Long) -> Unit)?
+    onDeleteSlot: ((Long) -> Unit)?,
+    onOpenWeatherAlert: ((SlotWithBookings) -> Unit)? = null,
+    onAddToCalendar: ((SlotWithBookings) -> Unit)? = null
 ) {
     val sunTimes = remember(dateIso) {
         SunCalculator.calculateSunTimes(dateIso)
@@ -487,7 +493,9 @@ fun DayOrganizerView(
                         onUnenrollStudent = { sId, stId -> onUnenrollStudent?.invoke(sId, stId) },
                         onToggleAttendance = { bId, stId, att -> onToggleAttendance?.invoke(bId, stId, att) },
                         onEditSlot = { s -> onEditSlot?.invoke(s) },
-                        onDeleteSlot = { sId -> onDeleteSlot?.invoke(sId) }
+                        onDeleteSlot = { sId -> onDeleteSlot?.invoke(sId) },
+                        onOpenWeatherAlert = { onOpenWeatherAlert?.invoke(slotItem) },
+                        onAddToCalendar = { onAddToCalendar?.invoke(slotItem) }
                     )
                 }
             }

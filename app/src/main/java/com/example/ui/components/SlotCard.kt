@@ -30,11 +30,15 @@ fun SlotCard(
     onUnenrollStudent: (Long, Long) -> Unit, // slotId, studentId
     onToggleAttendance: (Long, Long, Boolean) -> Unit, // bookingId, studentId, currentAttended
     onEditSlot: (LessonSlotEntity) -> Unit,
-    onDeleteSlot: (Long) -> Unit
+    onDeleteSlot: (Long) -> Unit,
+    onOpenWeatherAlert: (SlotWithBookings) -> Unit = {},
+    onAddToCalendar: (LessonSlotEntity) -> Unit = {}
 ) {
     val slot = slotItem.slot
     val lessonType = PlanningLessonType.fromCode(slot.lessonType)
     val isFull = slotItem.isFull
+    val isCancelled = slot.isCancelled
+    val hasAlert = slot.hasWeatherAlert
     val confirmedCount = slotItem.confirmedBookings.size
     val maxCap = slot.maxCapacity
     val ratio = if (maxCap > 0) (confirmedCount.toFloat() / maxCap).coerceIn(0f, 1f) else 0f
@@ -42,11 +46,15 @@ fun SlotCard(
     val timeRangeText = formatTimeRangeFrench(slot.startTime, slot.endTime)
 
     val cardBg = when {
+        isCancelled -> Color(0xFFFEF2F2)
+        hasAlert -> Color(0xFFFFFBEB)
         isFull -> Color(0xFFFFFAF9)
         else -> HighDensitySurface
     }
 
     val cardBorderColor = when {
+        isCancelled -> Color(0xFFDC2626)
+        hasAlert -> AmberAccent
         isFull -> RedAlertText.copy(alpha = 0.5f)
         else -> lessonType.borderColor.copy(alpha = 0.6f)
     }
@@ -63,6 +71,42 @@ fun SlotCard(
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
+            // Weather Alert / Cancellation Banner
+            if (isCancelled || hasAlert) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isCancelled) Color(0xFFFEE2E2) else Color(0xFFFEF3C7),
+                    border = BorderStroke(1.dp, if (isCancelled) Color(0xFFDC2626) else AmberAccent),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clickable { onOpenWeatherAlert(slotItem) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(if (isCancelled) "🚫" else "⚠️", fontSize = 14.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isCancelled) "SÉANCE ANNULÉE (AÉROLOGIE DÉFAVORABLE)" else "ALERTE MÉTÉO EN COURS",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                color = if (isCancelled) Color(0xFFDC2626) else AmberAccent
+                            )
+                            val alertMsg = if (slot.cancelReason.isNotBlank()) slot.cancelReason else slot.weatherAlert
+                            if (alertMsg.isNotBlank()) {
+                                Text(alertMsg, fontSize = 9.sp, color = HighDensityHeaderTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            if (slot.postponedTo.isNotBlank()) {
+                                Text("🔁 Report : ${slot.postponedTo}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = PrimaryBlue)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Header: Heure (de 8h à 10h), Type (VOL / GONFLAGE / PERF) & Statut Dispo (Vert/Rouge)
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -112,7 +156,21 @@ fun SlotCard(
                 }
 
                 // Status Badge (Complet / X Dispo)
-                if (isFull) {
+                if (isCancelled) {
+                    Surface(
+                        color = Color(0xFFFEE2E2),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Color(0xFFDC2626))
+                    ) {
+                        Text(
+                            "🚫 ANNULÉ",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFDC2626),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        )
+                    }
+                } else if (isFull) {
                     Surface(
                         color = RedAlertBg,
                         shape = RoundedCornerShape(8.dp),
@@ -335,7 +393,7 @@ fun SlotCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Actions: Inscrire quelqu'un, Modifier, Supprimer
+            // Actions: Inscrire quelqu'un, Météo/Annulation, Agenda, Modifier, Supprimer
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -345,12 +403,45 @@ fun SlotCard(
                     onClick = { onOpenEnrollStudent(slotItem) },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("+ Inscrire", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                // Weather Alert / Cancellation Button
+                IconButton(
+                    onClick = { onOpenWeatherAlert(slotItem) },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(
+                            if (isCancelled) Color(0xFFFEE2E2) else if (hasAlert) Color(0xFFFEF3C7) else HighDensityNavBar,
+                            RoundedCornerShape(8.dp)
+                        )
+                ) {
+                    Icon(
+                        imageVector = if (isCancelled) Icons.Default.Block else Icons.Default.WarningAmber,
+                        contentDescription = "Météo / Alerte",
+                        tint = if (isCancelled) Color(0xFFDC2626) else if (hasAlert) AmberAccent else PrimaryBlueDark,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                // Add to Google Calendar Button
+                IconButton(
+                    onClick = { onAddToCalendar(slot) },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(HighDensityNavBar, RoundedCornerShape(8.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Event,
+                        contentDescription = "Ajouter à l'agenda Google",
+                        tint = PrimaryBlueDark,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
 
                 IconButton(

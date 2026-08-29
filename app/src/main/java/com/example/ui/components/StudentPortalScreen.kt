@@ -34,6 +34,8 @@ import com.example.data.cloud.SyncStatus
 import com.example.data.model.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.PlanningViewModel
+import com.example.util.CalendarExportUtils
+import com.example.util.PdfExportUtils
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -43,6 +45,18 @@ private data class SyncPillStyle(
     val borderColor: Color,
     val text: String
 )
+
+// Date formatting helper for French display
+private fun formatDateFrench(dateIso: String): String {
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE)
+        val formatter = SimpleDateFormat("EEEE d MMMM yyyy", Locale.FRANCE)
+        val d = parser.parse(dateIso)
+        if (d != null) formatter.format(d).replaceFirstChar { it.uppercase() } else dateIso
+    } catch (e: Exception) {
+        dateIso
+    }
+}
 
 @Composable
 fun StudentPortalScreen(
@@ -57,7 +71,10 @@ fun StudentPortalScreen(
     syncStatus: SyncStatus = SyncStatus.CONNECTED_SYNCED,
     syncStatusMsg: String = "En direct",
     lastSyncTime: String = "",
-    onForceSync: () -> Unit = {}
+    onForceSync: () -> Unit = {},
+    allProgress: List<StudentProgressEntity> = emptyList(),
+    onExportStudentBookletPdf: ((StudentEntity) -> Unit)? = null,
+    onExportStudentBookletIcs: ((StudentEntity) -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -107,17 +124,64 @@ fun StudentPortalScreen(
         slots.groupBy { it.slot.dateIso }
     }
 
+    // Helper to check if student is enrolled in a slot
+    fun isStudentEnrolledInSlot(slotItem: SlotWithBookings): Boolean {
+        if (currentStudentId != null && slotItem.enrolledStudentIds.contains(currentStudentId)) return true
+        val cleanSavedPhone = savedProfile.phone.replace(" ", "")
+        val cleanSavedFirst = savedProfile.firstName.trim()
+        val cleanSavedLast = savedProfile.lastName.trim()
+
+        return slotItem.confirmedBookings.any { b ->
+            (cleanSavedPhone.isNotBlank() && b.student.phone.replace(" ", "") == cleanSavedPhone) ||
+            (cleanSavedFirst.isNotBlank() && b.student.firstName.equals(cleanSavedFirst, ignoreCase = true) && b.student.lastName.equals(cleanSavedLast, ignoreCase = true))
+        } || slotItem.waitingListBookings.any { b ->
+            (cleanSavedPhone.isNotBlank() && b.student.phone.replace(" ", "") == cleanSavedPhone) ||
+            (cleanSavedFirst.isNotBlank() && b.student.firstName.equals(cleanSavedFirst, ignoreCase = true) && b.student.lastName.equals(cleanSavedLast, ignoreCase = true))
+        }
+    }
+
+    // Helper to open WhatsApp to notify instructor of registration
+    fun sendWhatsAppRegistrationConfirmation(slotItem: SlotWithBookings) {
+        val slot = slotItem.slot
+        val type = PlanningLessonType.fromCode(slot.lessonType).label
+        val timeFr = formatTimeRangeFrench(slot.startTime, slot.endTime)
+        val dateFr = formatDateFrench(slot.dateIso)
+        val msg = "Bonjour ! Je vous confirme mon inscription pour la séance *$type* du *$dateFr* ($timeFr).\nÉlève : ${savedProfile.fullName} (${savedProfile.level})\nTél : ${savedProfile.phone}"
+        try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                data = android.net.Uri.parse("https://api.whatsapp.com/send?text=" + java.net.URLEncoder.encode(msg, "UTF-8"))
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            val shareIntent = Intent(Intent.ACTION_SEND)
+            shareIntent.type = "text/plain"
+            shareIntent.putExtra(Intent.EXTRA_TEXT, msg)
+            context.startActivity(Intent.createChooser(shareIntent, "Notifier le moniteur"))
+        }
+    }
+
+    // Sub-view in Tab 1: "ALL" vs "MY_BOOKINGS"
+    var studentListSubTab by remember { mutableStateOf("ALL") }
+
+    val myBookingsCount = remember(slots, currentStudentId, savedProfile) {
+        slots.count { isStudentEnrolledInSlot(it) }
+    }
+
     // Filtered slots for student list view
     val displaySlots = slots.filter { item ->
-        val dateMatches = when (selectedDateFilter) {
-            null, "TOUS" -> true
-            "TODAY" -> item.slot.dateIso == todayIso
-            "TOMORROW" -> item.slot.dateIso == tomorrowIso
-            "WEEK" -> item.slot.dateIso in todayIso..endOfWeekIso
-            else -> item.slot.dateIso == selectedDateFilter
+        if (studentListSubTab == "MY_BOOKINGS") {
+            isStudentEnrolledInSlot(item) && !item.slot.isCancelled
+        } else {
+            val dateMatches = when (selectedDateFilter) {
+                null, "TOUS" -> true
+                "TODAY" -> item.slot.dateIso == todayIso
+                "TOMORROW" -> item.slot.dateIso == tomorrowIso
+                "WEEK" -> item.slot.dateIso in todayIso..endOfWeekIso
+                else -> item.slot.dateIso == selectedDateFilter
+            }
+            val typeMatches = if (selectedTypeFilter != null) item.slot.lessonType.equals(selectedTypeFilter, ignoreCase = true) else true
+            dateMatches && typeMatches && !item.slot.isCancelled
         }
-        val typeMatches = if (selectedTypeFilter != null) item.slot.lessonType.equals(selectedTypeFilter, ignoreCase = true) else true
-        dateMatches && typeMatches && !item.slot.isCancelled
     }
 
     Scaffold(
@@ -298,7 +362,24 @@ fun StudentPortalScreen(
                             contentDescription = "Mes Créneaux & Liste"
                         )
                     },
-                    label = { Text("Mes Créneaux & Liste", fontWeight = if (studentTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
+                    label = { Text("Mes Créneaux", fontWeight = if (studentTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
+                        indicatorColor = PrimaryBlueContainer
+                    )
+                )
+
+                NavigationBarItem(
+                    selected = studentTab == 2,
+                    onClick = { studentTab = 2 },
+                    icon = {
+                        Icon(
+                            if (studentTab == 2) Icons.Default.MenuBook else Icons.Outlined.MenuBook,
+                            contentDescription = "Mon Livret FFPLUM"
+                        )
+                    },
+                    label = { Text("Mon Livret FFPLUM", fontWeight = if (studentTab == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = PrimaryBlue,
                         selectedTextColor = PrimaryBlue,
@@ -498,41 +579,110 @@ fun StudentPortalScreen(
                             .fillMaxSize()
                             .background(HighDensityBg)
                     ) {
-                        // Quick Filters Row
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(HighDensitySurface)
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        // Sub-navigation bar: All Slots vs My Registrations
+                        Surface(
+                            color = HighDensitySurface,
+                            tonalElevation = 2.dp,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                items(dateFilters) { (key, label) ->
-                                    val isSelected = (selectedDateFilter == key) || (selectedDateFilter == null && key == "TOUS")
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = { selectedDateFilter = key },
-                                        label = { Text(label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                }
-                            }
+                            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    // Button: All Open Slots
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (studentListSubTab == "ALL") PrimaryBlue else HighDensityNavBar,
+                                        border = BorderStroke(1.dp, if (studentListSubTab == "ALL") PrimaryBlue else BorderOutline),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { studentListSubTab = "ALL" }
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "📋 Toutes les séances",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (studentListSubTab == "ALL") Color.White else HighDensityHeaderTitle
+                                            )
+                                        }
+                                    }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                PlanningLessonType.entries.forEach { type ->
-                                    val isSelected = selectedTypeFilter == type.code
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = { selectedTypeFilter = if (isSelected) null else type.code },
-                                        label = { Text("${type.emoji} ${type.label}", fontSize = 11.sp) },
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
+                                    // Button: My Registrations with Badge
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (studentListSubTab == "MY_BOOKINGS") GreenSuccess else HighDensityNavBar,
+                                        border = BorderStroke(1.dp, if (studentListSubTab == "MY_BOOKINGS") GreenSuccess else BorderOutline),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { studentListSubTab = "MY_BOOKINGS" }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                "🎯 Mes Inscriptions",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (studentListSubTab == "MY_BOOKINGS") Color.White else HighDensityHeaderTitle
+                                            )
+                                            if (myBookingsCount > 0) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = if (studentListSubTab == "MY_BOOKINGS") Color.White else GreenSuccess
+                                                ) {
+                                                    Text(
+                                                        "$myBookingsCount",
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (studentListSubTab == "MY_BOOKINGS") GreenSuccess else Color.White,
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Quick Filters Row (only if in ALL view)
+                                if (studentListSubTab == "ALL") {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    LazyRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        items(dateFilters) { (key, label) ->
+                                            val isSelected = (selectedDateFilter == key) || (selectedDateFilter == null && key == "TOUS")
+                                            FilterChip(
+                                                selected = isSelected,
+                                                onClick = { selectedDateFilter = key },
+                                                label = { Text(label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        PlanningLessonType.entries.forEach { type ->
+                                            val isSelected = selectedTypeFilter == type.code
+                                            FilterChip(
+                                                selected = isSelected,
+                                                onClick = { selectedTypeFilter = if (isSelected) null else type.code },
+                                                label = { Text("${type.emoji} ${type.label}", fontSize = 11.sp) },
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -547,9 +697,19 @@ fun StudentPortalScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("📅", fontSize = 32.sp)
-                                    Text("Aucun créneau ouvert pour cette sélection", fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
-                                    Text("Consultez le Planning Visuel pour voir les autres mois.", fontSize = 12.sp, color = SecondaryText)
+                                    Text(if (studentListSubTab == "MY_BOOKINGS") "🪂" else "📅", fontSize = 36.sp)
+                                    Text(
+                                        if (studentListSubTab == "MY_BOOKINGS") "Vous n'avez aucune inscription active" else "Aucun créneau ouvert pour cette sélection",
+                                        fontWeight = FontWeight.Bold,
+                                        color = HighDensityHeaderTitle
+                                    )
+                                    Text(
+                                        if (studentListSubTab == "MY_BOOKINGS") "Inscrivez-vous en 1 clic dans l'onglet 'Toutes les séances' ou sur le Planning Visuel." else "Consultez le Planning Visuel pour voir les autres mois.",
+                                        fontSize = 12.sp,
+                                        color = SecondaryText,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 24.dp)
+                                    )
                                 }
                             }
                         } else {
@@ -562,11 +722,13 @@ fun StudentPortalScreen(
                                 contentPadding = PaddingValues(bottom = 30.dp)
                             ) {
                                 items(displaySlots, key = { it.slot.id }) { slotItem ->
+                                    val isEnrolled = isStudentEnrolledInSlot(slotItem)
                                     StudentSlotCard(
                                         slotItem = slotItem,
-                                        isAlreadyEnrolled = currentStudentId != null && slotItem.enrolledStudentIds.contains(currentStudentId),
+                                        isAlreadyEnrolled = isEnrolled,
                                         currentStudentId = currentStudentId,
                                         onUnenroll = { sId, stId -> onUnenroll(sId, stId) },
+                                        onNotifyWhatsApp = { sendWhatsAppRegistrationConfirmation(slotItem) },
                                         onRegisterClick = {
                                             if (!savedProfile.isConfigured) {
                                                 slotToRegister = slotItem
@@ -588,6 +750,316 @@ fun StudentPortalScreen(
                         }
                     }
                 }
+
+                2 -> {
+                    // Student FFPLUM Booklet & Progression Tab
+                    val matchedStudent = remember(allStudents, savedProfile) {
+                        if (!savedProfile.isConfigured) null
+                        else allStudents.find { it.phone == savedProfile.phone || (it.firstName.equals(savedProfile.firstName, ignoreCase = true) && it.lastName.equals(savedProfile.lastName, ignoreCase = true)) }
+                    }
+                    val studentProgress = remember(allProgress, matchedStudent) {
+                        matchedStudent?.let { st -> allProgress.find { it.studentId == st.id } }
+                    }
+
+                    if (!savedProfile.isConfigured || matchedStudent == null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(HighDensityBg)
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text("📖", fontSize = 48.sp)
+                                Text(
+                                    "Livret Numérique FFPLUM",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    color = HighDensityHeaderTitle
+                                )
+                                Text(
+                                    "Pour consulter votre suivi pédagogique, vos exercices validés et télécharger votre livret officiel FFPLUM, veuillez configurer votre profil ou vous inscrire à un premier créneau.",
+                                    fontSize = 13.sp,
+                                    color = SecondaryText,
+                                    textAlign = TextAlign.Center
+                                )
+                                Button(
+                                    onClick = { showProfileModal = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Renseigner mon profil")
+                                }
+                            }
+                        }
+                    } else {
+                        val prog = studentProgress ?: StudentProgressEntity(studentId = matchedStudent.id)
+                        val totalExercises = prog.totalSkillsCount
+                        val completedExercises = prog.validatedSkillsCount
+                        val progressPct = prog.completionPercent
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(HighDensityBg)
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(bottom = 40.dp)
+                        ) {
+                            // Header Card: Student Info & Overall Progress
+                            item {
+                                Card(
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(containerColor = HighDensitySurface),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = PrimaryBlue,
+                                                    modifier = Modifier.size(44.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Text("🪂", fontSize = 22.sp)
+                                                    }
+                                                }
+                                                Column {
+                                                    Text(
+                                                        text = matchedStudent.fullName,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 16.sp,
+                                                        color = HighDensityHeaderTitle
+                                                    )
+                                                    Text(
+                                                        text = "Niveau : ${matchedStudent.level} • Paramoteur FFPLUM",
+                                                        fontSize = 12.sp,
+                                                        color = SecondaryText
+                                                    )
+                                                }
+                                            }
+
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = if (prog.skillBrevetPilote) GreenSuccessBg else PrimaryBlueContainer
+                                            ) {
+                                                Text(
+                                                    text = if (prog.skillBrevetPilote) "🏆 Brevet Validé" else "En formation",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp,
+                                                    color = if (prog.skillBrevetPilote) GreenSuccess else PrimaryBlue,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Divider(color = BorderOutline.copy(alpha = 0.4f))
+
+                                        // Progress Bar
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Progression globale cursus", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
+                                            Text("$completedExercises / $totalExercises modules ($progressPct%)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                                        }
+
+                                        LinearProgressIndicator(
+                                            progress = { progressPct / 100f },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(8.dp),
+                                            color = if (progressPct >= 80) GreenSuccess else PrimaryBlue,
+                                            trackColor = BorderOutline.copy(alpha = 0.3f)
+                                        )
+
+                                        // Flight Stats Row
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = HighDensityNavBar,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(8.dp),
+                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                ) {
+                                                    Text("⏱️ Heures de vol", fontSize = 10.sp, color = SecondaryText)
+                                                    Text(
+                                                        prog.totalFlightHoursFormatted,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 15.sp,
+                                                        color = HighDensityHeaderTitle
+                                                    )
+                                                }
+                                            }
+
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = HighDensityNavBar,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(8.dp),
+                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                ) {
+                                                    Text("🛫 Décollages", fontSize = 10.sp, color = SecondaryText)
+                                                    Text(
+                                                        "${prog.totalFlightsCount}",
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 15.sp,
+                                                        color = HighDensityHeaderTitle
+                                                    )
+                                                }
+                                            }
+
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = HighDensityNavBar,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(8.dp),
+                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                ) {
+                                                    Text("🪂 Gonflage", fontSize = 10.sp, color = SecondaryText)
+                                                    Text(
+                                                        prog.totalGonflageHoursFormatted,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 15.sp,
+                                                        color = HighDensityHeaderTitle
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        // Export Buttons
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Button(
+                                                onClick = { onExportStudentBookletPdf?.invoke(matchedStudent) },
+                                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(15.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Livret PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = { onExportStudentBookletIcs?.invoke(matchedStudent) },
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(15.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Agenda (.ics)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Autonomy Radar / Rating
+                            item {
+                                Card(
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(containerColor = HighDensitySurface),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text("⭐ Indices d'Autonomie Évalués par le Moniteur", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
+                                        AutonomyRatingRow("Décollage (Dos / Face)", prog.autonomyDecollage)
+                                        AutonomyRatingRow("Pilotage & Conduite de Vol", prog.autonomyEnVol)
+                                        AutonomyRatingRow("Approche & Atterrissage", prog.autonomyAtterrissage)
+                                        AutonomyRatingRow("Gonflage & Maîtrise Voile", prog.autonomyGonflage)
+                                    }
+                                }
+                            }
+
+                            // Pedagogical Checklist
+                            item {
+                                Card(
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(containerColor = HighDensitySurface),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text("📋 Progression FFPLUM Validée", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
+                                        Text("Phase 1 : Gonflage & Pré-vol", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                                        ChecklistItemDisplay("Contrôle pré-vol et disposition de l'aile", prog.skillPrevol)
+                                        ChecklistItemDisplay("Gonflage dos au vent et montée d'aile", prog.skillGonflageDos)
+                                        ChecklistItemDisplay("Gonflage face à l'aile et affalement", prog.skillGonflageFace)
+                                        ChecklistItemDisplay("Démarrage et sécurité moteur au sol", prog.skillMoteurSol)
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("Phase 2 : Grands Vols & Manœuvres", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                                        ChecklistItemDisplay("Décollage autonome en sécurité", prog.skillDecoAutonome)
+                                        ChecklistItemDisplay("Virages 360° et maintien d'altitude", prog.skillViragesAltitude)
+                                        ChecklistItemDisplay("Simulation panne moteur et PTU/PTS", prog.skillPanneMoteur)
+                                        ChecklistItemDisplay("Précision d'atterrissage sur cible", prog.skillAtterroPrecision)
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("Phase 3 : Brevet & Navigation", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                                        ChecklistItemDisplay("Navigation et analyse aérologie", prog.skillNavigationAerologie)
+                                        ChecklistItemDisplay("Brevet de pilote paramoteur validé", prog.skillBrevetPilote)
+                                        ChecklistItemDisplay("Qualification emport passager", prog.skillEmportPassager)
+                                    }
+                                }
+                            }
+
+                            if (prog.instructorNotes.isNotBlank()) {
+                                item {
+                                    Card(
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = CardDefaults.cardColors(containerColor = HighDensitySurface),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text("📝 Commentaires et Conseils du Moniteur", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = HighDensityHeaderTitle)
+                                            Text(prog.instructorNotes, fontSize = 12.sp, color = SecondaryText)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -602,6 +1074,7 @@ fun StudentPortalScreen(
             savedProfile = savedProfile,
             onDismiss = { selectedDayForDetail = null },
             onUnenroll = { slotId, studentId -> onUnenroll(slotId, studentId) },
+            onNotifyWhatsApp = { sendWhatsAppRegistrationConfirmation(it) },
             onRegisterSlot = { slotItem ->
                 if (!savedProfile.isConfigured) {
                     slotToRegister = slotItem
@@ -807,24 +1280,69 @@ fun StudentPortalScreen(
 }
 
 @Composable
+private fun AutonomyRatingRow(label: String, rating: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, fontSize = 11.sp, color = HighDensityHeaderTitle, modifier = Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            (1..5).forEach { i ->
+                Text(
+                    text = if (i <= rating) "★" else "☆",
+                    fontSize = 14.sp,
+                    color = if (i <= rating) Color(0xFFEAB308) else BorderOutline
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChecklistItemDisplay(label: String, done: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(if (done) "✅" else "⚪", fontSize = 12.sp)
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = if (done) HighDensityHeaderTitle else SecondaryText,
+            fontWeight = if (done) FontWeight.SemiBold else FontWeight.Normal
+        )
+    }
+}
+
+@Composable
 fun StudentSlotCard(
     slotItem: SlotWithBookings,
     isAlreadyEnrolled: Boolean,
     currentStudentId: Long?,
     onUnenroll: (slotId: Long, studentId: Long) -> Unit,
+    onNotifyWhatsApp: (() -> Unit)? = null,
     onRegisterClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val slot = slotItem.slot
     val type = PlanningLessonType.fromCode(slot.lessonType)
     val isFull = slotItem.isFull
     val timeRangeText = formatTimeRangeFrench(slot.startTime, slot.endTime)
 
+    val myBooking = slotItem.confirmedBookings.find { it.booking.studentId == currentStudentId }
+        ?: slotItem.waitingListBookings.find { it.booking.studentId == currentStudentId }
+    val isWaiting = myBooking?.booking?.isWaitingList ?: false
+
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = HighDensitySurface),
+        colors = CardDefaults.cardColors(
+            containerColor = if (slot.isCancelled) RedAlertBg.copy(alpha = 0.4f) else if (isAlreadyEnrolled) Color(0xFFF0FDF4) else HighDensitySurface
+        ),
         border = BorderStroke(
             1.5.dp,
-            if (isAlreadyEnrolled) PrimaryBlue else if (isFull) RedAlertText.copy(alpha = 0.5f) else type.borderColor.copy(alpha = 0.7f)
+            if (slot.isCancelled) RedAlertText else if (isAlreadyEnrolled) GreenSuccess else if (isFull) RedAlertText.copy(alpha = 0.5f) else type.borderColor.copy(alpha = 0.7f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
@@ -835,7 +1353,7 @@ fun StudentSlotCard(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Header: Heure (de 8h à 10h) & Type (VOL / GONFLAGE / PERF)
+            // Header: Heure & Type
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -862,7 +1380,7 @@ fun StudentSlotCard(
                     }
                 }
 
-                // Type de leçon (VOL, GONFLAGE, PERF) - Grand Badge Visuel
+                // Type de leçon
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = type.containerColor,
@@ -884,9 +1402,23 @@ fun StudentSlotCard(
                 }
 
                 // Status Badge
-                if (isAlreadyEnrolled) {
-                    Surface(shape = RoundedCornerShape(8.dp), color = PrimaryBlueContainer) {
-                        Text("✅ Inscrit", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
+                if (slot.isCancelled) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = RedAlertBg, border = BorderStroke(1.dp, RedAlertText)) {
+                        Text("🔴 ANNULÉ", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = RedAlertText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
+                    }
+                } else if (isAlreadyEnrolled) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isWaiting) Color(0xFFFEF3C7) else GreenSuccessBg,
+                        border = BorderStroke(1.dp, if (isWaiting) Color(0xFFD97706) else GreenSuccess)
+                    ) {
+                        Text(
+                            if (isWaiting) "⏳ En attente" else "✅ Inscrit",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isWaiting) Color(0xFFD97706) else GreenSuccess,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        )
                     }
                 } else if (isFull) {
                     Surface(shape = RoundedCornerShape(8.dp), color = RedAlertBg, border = BorderStroke(1.dp, RedAlertText)) {
@@ -899,18 +1431,62 @@ fun StudentSlotCard(
                 }
             }
 
-            // Title & Location
-            Text(
-                text = slot.title,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = HighDensityHeaderTitle
-            )
+            // Weather alert or cancellation banner
+            if (slot.isCancelled) {
+                Surface(
+                    color = RedAlertBg,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, RedAlertText.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("⚠️", fontSize = 14.sp)
+                        Column {
+                            Text("Séance annulée par le moniteur", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = RedAlertText)
+                            if (slot.cancelReason.isNotBlank()) {
+                                Text(slot.cancelReason, fontSize = 10.sp, color = RedAlertText)
+                            }
+                            if (slot.postponedTo.isNotBlank()) {
+                                Text("Reporté au : ${slot.postponedTo}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = PrimaryBlue)
+                            }
+                        }
+                    }
+                }
+            } else if (slot.weatherAlert.isNotBlank()) {
+                Surface(
+                    color = Color(0xFFFEF3C7),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFD97706).copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("🌤️", fontSize = 14.sp)
+                        Text(slot.weatherAlert, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF92400E))
+                    }
+                }
+            }
 
-            if (slot.location.isNotBlank()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("📍", fontSize = 10.sp)
-                    Text(slot.location, fontSize = 11.sp, color = SecondaryText)
+            // Title & Date/Location
+            Column {
+                Text(
+                    text = "${slot.title} • ${formatDateFrench(slot.dateIso)}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.5.sp,
+                    color = HighDensityHeaderTitle
+                )
+                if (slot.location.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("📍", fontSize = 10.sp)
+                        Text(slot.location, fontSize = 11.sp, color = SecondaryText)
+                    }
                 }
             }
 
@@ -918,25 +1494,70 @@ fun StudentSlotCard(
                 Text("💬 ${slot.notes}", fontSize = 10.sp, color = SecondaryText)
             }
 
-            // 1-Click Action Button
+            // Action Buttons
             if (isAlreadyEnrolled) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(8.dp))
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text("Vous êtes inscrit sur ce créneau", fontSize = 11.sp, color = GreenSuccess, fontWeight = FontWeight.Bold)
-                    TextButton(
-                        onClick = {
-                            if (currentStudentId != null) {
-                                onUnenroll(slot.id, currentStudentId)
-                            }
-                        }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Se désinscrire", fontSize = 11.sp, color = RedAlertText)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(if (isWaiting) "⏳" else "✅", fontSize = 12.sp)
+                            Text(
+                                if (isWaiting) "Place en liste d'attente" else "Place confirmée pour cette séance",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isWaiting) Color(0xFFD97706) else GreenSuccess
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+                                if (currentStudentId != null) {
+                                    onUnenroll(slot.id, currentStudentId)
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Se désinscrire", fontSize = 11.sp, color = RedAlertText, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    // Direct WhatsApp Confirmation Button to Instructor
+                    onNotifyWhatsApp?.let { sendWA ->
+                        Button(
+                            onClick = sendWA,
+                            colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.fillMaxWidth().height(36.dp)
+                        ) {
+                            Text("💬", fontSize = 13.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Confirmer au moniteur sur WhatsApp", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Google Calendar Export Button
+                    OutlinedButton(
+                        onClick = { CalendarExportUtils.addSlotToGoogleCalendar(context, slot) },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().height(34.dp)
+                    ) {
+                        Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(14.dp), tint = PrimaryBlue)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Ajouter à mon agenda Google", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = PrimaryBlue)
                     }
                 }
-            } else {
+            } else if (!slot.isCancelled) {
                 Button(
                     onClick = onRegisterClick,
                     colors = ButtonDefaults.buttonColors(
@@ -969,6 +1590,7 @@ fun StudentDayDetailSheet(
     savedProfile: PlanningViewModel.StudentProfile,
     onDismiss: () -> Unit,
     onUnenroll: (Long, Long) -> Unit,
+    onNotifyWhatsApp: ((SlotWithBookings) -> Unit)? = null,
     onRegisterSlot: (SlotWithBookings) -> Unit
 ) {
     val sunTimes = remember(dateIso) {
@@ -997,7 +1619,7 @@ fun StudentDayDetailSheet(
                     Text("📅", fontSize = 22.sp)
                     Column {
                         Text(
-                            text = "Séances du $dateIso",
+                            text = "Séances du ${formatDateFrench(dateIso)}",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = HighDensityHeaderTitle
@@ -1065,6 +1687,7 @@ fun StudentDayDetailSheet(
                         isAlreadyEnrolled = isAlreadyEnrolled,
                         currentStudentId = currentStudentId,
                         onUnenroll = onUnenroll,
+                        onNotifyWhatsApp = { onNotifyWhatsApp?.invoke(slotItem) },
                         onRegisterClick = { onRegisterSlot(slotItem) }
                     )
                 }

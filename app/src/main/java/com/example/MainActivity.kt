@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
 
                 // State from ViewModel
                 val allStudents by viewModel.allStudents.collectAsStateWithLifecycle()
+                val allProgress by viewModel.allProgress.collectAsStateWithLifecycle()
                 val slotsWithBookings by viewModel.slotsWithBookings.collectAsStateWithLifecycle()
                 val filteredSlots by viewModel.filteredSlots.collectAsStateWithLifecycle()
                 val filteredStudentsWithStats by viewModel.filteredStudentsWithStats.collectAsStateWithLifecycle()
@@ -82,6 +83,8 @@ class MainActivity : ComponentActivity() {
                 var showAddStudentDialog by remember { mutableStateOf(false) }
                 var studentToEdit by remember { mutableStateOf<StudentEntity?>(null) }
                 var slotToEnrollStudent by remember { mutableStateOf<SlotWithBookings?>(null) }
+                var slotForWeatherAlert by remember { mutableStateOf<SlotWithBookings?>(null) }
+                var studentForProgress by remember { mutableStateOf<StudentEntity?>(null) }
                 var selectedDayForDetail by remember { mutableStateOf<String?>(null) }
 
                 // Navigation Bar Tab: 0 = Calendrier Visuel, 1 = Liste Créneaux, 2 = Élèves & Stats
@@ -137,6 +140,13 @@ class MainActivity : ComponentActivity() {
                             viewModel.unenrollStudent(slotId, studentId)
                         },
                         allStudents = allStudents,
+                        allProgress = allProgress,
+                        onExportStudentBookletPdf = { student ->
+                            viewModel.exportStudentBookletPdf(student)
+                        },
+                        onExportStudentBookletIcs = { student ->
+                            viewModel.exportStudentBookletIcs(student)
+                        },
                         onVerifyPin = { pin ->
                             viewModel.verifyInstructorPin(pin)
                         },
@@ -432,6 +442,12 @@ class MainActivity : ComponentActivity() {
                                     onOpenStandardDayForDate = { dateIso ->
                                         dateForStandardDay = dateIso
                                         showStandardDayDialog = true
+                                    },
+                                    onOpenWeatherAlert = { slotItem ->
+                                        slotForWeatherAlert = slotItem
+                                    },
+                                    onAddToCalendar = { slotItem ->
+                                        viewModel.addSlotToCalendar(slotItem.slot)
                                     }
                                 )
 
@@ -464,11 +480,18 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onDeleteSlot = { slotId ->
                                         viewModel.deleteSlot(slotId)
+                                    },
+                                    onOpenWeatherAlert = { slotItem ->
+                                        slotForWeatherAlert = slotItem
+                                    },
+                                    onAddToCalendar = { slot ->
+                                        viewModel.addSlotToCalendar(slot)
                                     }
                                 )
 
                                 2 -> StudentsScreen(
                                     studentsStats = filteredStudentsWithStats,
+                                    progressList = allProgress,
                                     searchQuery = studentSearchQuery,
                                     onSearchQueryChange = { q -> viewModel.setStudentSearchQuery(q) },
                                     selectedLevelFilter = studentLevelFilter,
@@ -483,6 +506,9 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onDeleteStudent = { s ->
                                         viewModel.deleteStudent(s)
+                                    },
+                                    onOpenProgress = { student ->
+                                        studentForProgress = student
                                     }
                                 )
                             }
@@ -522,6 +548,12 @@ class MainActivity : ComponentActivity() {
                         },
                         onDeleteSlot = { slotId ->
                             viewModel.deleteSlot(slotId)
+                        },
+                        onOpenWeatherAlert = { slotItem ->
+                            slotForWeatherAlert = slotItem
+                        },
+                        onAddToCalendar = { slot ->
+                            viewModel.addSlotToCalendar(slot)
                         }
                     )
                 }
@@ -683,6 +715,60 @@ class MainActivity : ComponentActivity() {
                         onEnroll = { slotId, studentId, isWaitingList ->
                             viewModel.enrollStudent(slotId, studentId, isWaitingList)
                             slotToEnrollStudent = null
+                        }
+                    )
+                }
+
+                // Dialog: Weather Alert & Slot Cancellation
+                slotForWeatherAlert?.let { slotItem ->
+                    WeatherAlertDialog(
+                        slot = slotItem.slot,
+                        enrolledStudents = slotItem.bookings.map { it.student },
+                        onDismiss = { slotForWeatherAlert = null },
+                        onConfirm = { isCancelled, weatherAlert, cancelReason, postponedTo, broadcastWhatsApp ->
+                            viewModel.updateSlotWeather(
+                                slot = slotItem.slot,
+                                enrolledStudents = slotItem.bookings.map { it.student },
+                                isCancelled = isCancelled,
+                                weatherAlert = weatherAlert,
+                                cancelReason = cancelReason,
+                                postponedTo = postponedTo,
+                                broadcastNotification = true
+                            )
+                            if (broadcastWhatsApp) {
+                                val text = viewModel.generateWeatherAlertWhatsApp(
+                                    slot = slotItem.slot.copy(
+                                        isCancelled = isCancelled,
+                                        weatherAlert = weatherAlert,
+                                        cancelReason = cancelReason,
+                                        postponedTo = postponedTo
+                                    ),
+                                    enrolledStudents = slotItem.bookings.map { it.student }
+                                )
+                                openWhatsAppDirect(text)
+                            }
+                            slotForWeatherAlert = null
+                        }
+                    )
+                }
+
+                // Dialog: Student FFPLUM Progress & Booklet
+                studentForProgress?.let { student ->
+                    val prog = allProgress.find { it.studentId == student.id }
+                        ?: StudentProgressEntity(studentId = student.id)
+                    StudentProgressDialog(
+                        student = student,
+                        initialProgress = prog,
+                        onDismiss = { studentForProgress = null },
+                        onSaveProgress = { updatedProgress ->
+                            viewModel.saveStudentProgress(updatedProgress)
+                            studentForProgress = null
+                        },
+                        onExportPdf = { s, _ ->
+                            viewModel.exportStudentBookletPdf(s)
+                        },
+                        onShareWhatsApp = { text ->
+                            openWhatsAppDirect(text)
                         }
                     )
                 }

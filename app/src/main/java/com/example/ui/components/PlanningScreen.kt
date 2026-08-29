@@ -32,7 +32,9 @@ fun PlanningScreen(
     onUnenrollStudent: (Long, Long) -> Unit,
     onToggleAttendance: (Long, Long, Boolean) -> Unit,
     onEditSlot: (LessonSlotEntity) -> Unit,
-    onDeleteSlot: (Long) -> Unit
+    onDeleteSlot: (Long) -> Unit,
+    onOpenWeatherAlert: (SlotWithBookings) -> Unit = {},
+    onAddToCalendar: (LessonSlotEntity) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -92,7 +94,9 @@ fun PlanningScreen(
                         onUnenrollStudent = onUnenrollStudent,
                         onToggleAttendance = onToggleAttendance,
                         onEditSlot = onEditSlot,
-                        onDeleteSlot = onDeleteSlot
+                        onDeleteSlot = onDeleteSlot,
+                        onOpenWeatherAlert = onOpenWeatherAlert,
+                        onAddToCalendar = onAddToCalendar
                     )
                 }
             }

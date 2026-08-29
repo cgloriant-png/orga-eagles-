@@ -361,6 +361,9 @@ class CloudSyncManager(
                         maxCapacity = s.optInt("maxCapacity", 4),
                         notes = s.optString("notes"),
                         isCancelled = s.optBoolean("isCancelled", false),
+                        weatherAlert = s.optString("weatherAlert", ""),
+                        cancelReason = s.optString("cancelReason", ""),
+                        postponedTo = s.optString("postponedTo", ""),
                         createdAt = s.optLong("createdAt", System.currentTimeMillis())
                     )
                 )
@@ -412,9 +415,45 @@ class CloudSyncManager(
             }
         }
 
+        // 5. Parse and upsert remote student progress
+        val remoteProgressArray = remoteJson.optJSONArray("progress") ?: JSONArray()
+        val remoteProgressList = mutableListOf<com.example.data.model.StudentProgressEntity>()
+        for (i in 0 until remoteProgressArray.length()) {
+            val pr = remoteProgressArray.getJSONObject(i)
+            val studentId = pr.optLong("studentId")
+            if (studentId !in allDeletedStudents) {
+                remoteProgressList.add(
+                    com.example.data.model.StudentProgressEntity(
+                        studentId = studentId,
+                        totalFlightMinutes = pr.optInt("totalFlightMinutes", 0),
+                        totalFlightsCount = pr.optInt("totalFlightsCount", 0),
+                        totalGonflageMinutes = pr.optInt("totalGonflageMinutes", 0),
+                        autonomyDecollage = pr.optInt("autonomyDecollage", 1),
+                        autonomyEnVol = pr.optInt("autonomyEnVol", 1),
+                        autonomyAtterrissage = pr.optInt("autonomyAtterrissage", 1),
+                        autonomyGonflage = pr.optInt("autonomyGonflage", 1),
+                        skillPrevol = pr.optBoolean("skillPrevol", false),
+                        skillGonflageFace = pr.optBoolean("skillGonflageFace", false),
+                        skillGonflageDos = pr.optBoolean("skillGonflageDos", false),
+                        skillMoteurSol = pr.optBoolean("skillMoteurSol", false),
+                        skillDecoAutonome = pr.optBoolean("skillDecoAutonome", false),
+                        skillViragesAltitude = pr.optBoolean("skillViragesAltitude", false),
+                        skillPanneMoteur = pr.optBoolean("skillPanneMoteur", false),
+                        skillAtterroPrecision = pr.optBoolean("skillAtterroPrecision", false),
+                        skillNavigationAerologie = pr.optBoolean("skillNavigationAerologie", false),
+                        skillBrevetPilote = pr.optBoolean("skillBrevetPilote", false),
+                        skillEmportPassager = pr.optBoolean("skillEmportPassager", false),
+                        instructorNotes = pr.optString("instructorNotes", ""),
+                        lastUpdated = pr.optLong("lastUpdated", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+
         if (remoteSlots.isNotEmpty()) dao.insertSlots(remoteSlots)
         if (remoteStudents.isNotEmpty()) dao.insertStudents(remoteStudents)
         if (remoteBookings.isNotEmpty()) dao.insertBookings(remoteBookings)
+        if (remoteProgressList.isNotEmpty()) dao.insertAllProgress(remoteProgressList)
 
         // Check if local database has items that were not yet in the remote snapshot
         val localUnsyncedSlots = localSlots.filter { it.id !in remoteSlotIds && it.id !in allDeletedSlots }
@@ -450,6 +489,7 @@ class CloudSyncManager(
             val slots = dao.getAllSlotsList()
             val students = dao.getAllStudentsList()
             val bookings = dao.getAllBookingsList()
+            val progressList = dao.getAllStudentProgressList()
             val deletedSlotIds = getDeletedIds("slot")
             val deletedBookingIds = getDeletedIds("booking")
             val deletedStudentIds = getDeletedIds("student")
@@ -468,6 +508,9 @@ class CloudSyncManager(
                     obj.put("maxCapacity", s.maxCapacity)
                     obj.put("notes", s.notes)
                     obj.put("isCancelled", s.isCancelled)
+                    obj.put("weatherAlert", s.weatherAlert)
+                    obj.put("cancelReason", s.cancelReason)
+                    obj.put("postponedTo", s.postponedTo)
                     obj.put("createdAt", s.createdAt)
                     slotsArray.put(obj)
                 }
@@ -504,6 +547,35 @@ class CloudSyncManager(
                 }
             }
 
+            val progressArray = JSONArray()
+            for (pr in progressList) {
+                if (pr.studentId !in deletedStudentIds) {
+                    val obj = JSONObject()
+                    obj.put("studentId", pr.studentId)
+                    obj.put("totalFlightMinutes", pr.totalFlightMinutes)
+                    obj.put("totalFlightsCount", pr.totalFlightsCount)
+                    obj.put("totalGonflageMinutes", pr.totalGonflageMinutes)
+                    obj.put("autonomyDecollage", pr.autonomyDecollage)
+                    obj.put("autonomyEnVol", pr.autonomyEnVol)
+                    obj.put("autonomyAtterrissage", pr.autonomyAtterrissage)
+                    obj.put("autonomyGonflage", pr.autonomyGonflage)
+                    obj.put("skillPrevol", pr.skillPrevol)
+                    obj.put("skillGonflageFace", pr.skillGonflageFace)
+                    obj.put("skillGonflageDos", pr.skillGonflageDos)
+                    obj.put("skillMoteurSol", pr.skillMoteurSol)
+                    obj.put("skillDecoAutonome", pr.skillDecoAutonome)
+                    obj.put("skillViragesAltitude", pr.skillViragesAltitude)
+                    obj.put("skillPanneMoteur", pr.skillPanneMoteur)
+                    obj.put("skillAtterroPrecision", pr.skillAtterroPrecision)
+                    obj.put("skillNavigationAerologie", pr.skillNavigationAerologie)
+                    obj.put("skillBrevetPilote", pr.skillBrevetPilote)
+                    obj.put("skillEmportPassager", pr.skillEmportPassager)
+                    obj.put("instructorNotes", pr.instructorNotes)
+                    obj.put("lastUpdated", pr.lastUpdated)
+                    progressArray.put(obj)
+                }
+            }
+
             val deletedSlotsJson = JSONArray()
             deletedSlotIds.forEach { deletedSlotsJson.put(it) }
 
@@ -520,6 +592,7 @@ class CloudSyncManager(
             payload.put("slots", slotsArray)
             payload.put("students", studentsArray)
             payload.put("bookings", bookingsArray)
+            payload.put("progress", progressArray)
             payload.put("deletedSlotIds", deletedSlotsJson)
             payload.put("deletedBookingIds", deletedBookingsJson)
             payload.put("deletedStudentIds", deletedStudentsJson)

@@ -30,13 +30,15 @@ import com.example.ui.theme.*
 @Composable
 fun StudentsScreen(
     studentsStats: List<StudentWithStats>,
+    progressList: List<com.example.data.model.StudentProgressEntity> = emptyList(),
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     selectedLevelFilter: String?,
     onLevelFilterChange: (String?) -> Unit,
     onOpenAddStudent: () -> Unit,
     onEditStudent: (StudentEntity) -> Unit,
-    onDeleteStudent: (StudentEntity) -> Unit
+    onDeleteStudent: (StudentEntity) -> Unit,
+    onOpenProgress: (StudentEntity) -> Unit = {}
 ) {
     val context = LocalContext.current
     val levels = listOf("Gonflage", "Vol", "Perf")
@@ -46,6 +48,8 @@ fun StudentsScreen(
     val totalBookingsAll = studentsStats.sumOf { it.totalBookings }
     val totalAttendedAll = studentsStats.sumOf { it.attendedBookings }
     val globalAttendanceRate = if (totalBookingsAll > 0) (totalAttendedAll.toFloat() / totalBookingsAll * 100).toInt() else 0
+
+    val progressMap = remember(progressList) { progressList.associateBy { it.studentId } }
 
     Column(
         modifier = Modifier
@@ -165,10 +169,13 @@ fun StudentsScreen(
                 contentPadding = PaddingValues(bottom = 60.dp)
             ) {
                 items(studentsStats, key = { it.student.id }) { item ->
+                    val progress = progressMap[item.student.id]
                     StudentStatCard(
                         item = item,
+                        progress = progress,
                         onEdit = { onEditStudent(item.student) },
                         onDelete = { onDeleteStudent(item.student) },
+                        onOpenProgress = { onOpenProgress(item.student) },
                         onCallPhone = { phone ->
                             val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
                             try { context.startActivity(intent) } catch (_: Exception) {}
@@ -205,8 +212,10 @@ private fun StatColumn(
 @Composable
 fun StudentStatCard(
     item: StudentWithStats,
+    progress: com.example.data.model.StudentProgressEntity? = null,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onOpenProgress: () -> Unit = {},
     onCallPhone: (String) -> Unit,
     onOpenWhatsApp: (String) -> Unit
 ) {
@@ -347,6 +356,45 @@ fun StudentStatCard(
                     fontWeight = FontWeight.Bold,
                     color = if (item.attendanceRate >= 80f) GreenSuccess else if (item.attendanceRate >= 50f) Color(0xFFD97706) else RedAlertText
                 )
+            }
+
+            // Livret FFPLUM Progression Bar & Edit Button
+            val compPercent = progress?.completionPercent ?: 0
+            val flightHours = progress?.totalFlightHoursFormatted ?: "0h"
+            val flightsCount = progress?.totalFlightsCount ?: 0
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = PrimaryBlueContainer.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.3f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenProgress() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("📖", fontSize = 13.sp)
+                        Column {
+                            Text("Livret FFPLUM : $compPercent% ($flightHours • $flightsCount vols)", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = PrimaryBlueDark)
+                            Text("Déco ${progress?.autonomyDecollage ?: 1}/5 • Vol ${progress?.autonomyEnVol ?: 1}/5 • Atterro ${progress?.autonomyAtterrissage ?: 1}/5", fontSize = 9.sp, color = SecondaryText)
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = PrimaryBlue,
+                        contentColor = Color.White
+                    ) {
+                        Text("Ouvrir", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
+                    }
+                }
             }
 
             if (student.notes.isNotBlank()) {

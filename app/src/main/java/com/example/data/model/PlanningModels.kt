@@ -33,8 +33,75 @@ data class LessonSlotEntity(
     val maxCapacity: Int = 4,
     val notes: String = "",
     val isCancelled: Boolean = false,
+    val weatherAlert: String = "", // e.g. "Vent fort > 25 km/h", "Turbulences", "Pluie"
+    val cancelReason: String = "", // e.g. "Aérologie défavorable", "Rafales"
+    val postponedTo: String = "", // e.g. "2026-08-30 08:30"
     val createdAt: Long = System.currentTimeMillis()
+) {
+    val hasWeatherAlert: Boolean get() = weatherAlert.isNotBlank() || cancelReason.isNotBlank()
+}
+
+@Entity(
+    tableName = "student_progress",
+    foreignKeys = [
+        ForeignKey(
+            entity = StudentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["studentId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ]
 )
+data class StudentProgressEntity(
+    @PrimaryKey val studentId: Long,
+    val totalFlightMinutes: Int = 0,
+    val totalFlightsCount: Int = 0,
+    val totalGonflageMinutes: Int = 0,
+    val autonomyDecollage: Int = 1, // 1: Débutant, 2: Guidé radio, 3: Perfectionnement, 4: Autonome, 5: Maîtrisé
+    val autonomyEnVol: Int = 1,
+    val autonomyAtterrissage: Int = 1,
+    val autonomyGonflage: Int = 1,
+    // Validations livret FFPLUM
+    val skillPrevol: Boolean = false,
+    val skillGonflageFace: Boolean = false,
+    val skillGonflageDos: Boolean = false,
+    val skillMoteurSol: Boolean = false,
+    val skillDecoAutonome: Boolean = false,
+    val skillViragesAltitude: Boolean = false,
+    val skillPanneMoteur: Boolean = false,
+    val skillAtterroPrecision: Boolean = false,
+    val skillNavigationAerologie: Boolean = false,
+    val skillBrevetPilote: Boolean = false,
+    val skillEmportPassager: Boolean = false,
+    val instructorNotes: String = "",
+    val lastUpdated: Long = System.currentTimeMillis()
+) {
+    val totalFlightHoursFormatted: String
+        get() {
+            val h = totalFlightMinutes / 60
+            val m = totalFlightMinutes % 60
+            return if (m == 0) "${h}h" else "${h}h${m.toString().padStart(2, '0')}"
+        }
+
+    val totalGonflageHoursFormatted: String
+        get() {
+            val h = totalGonflageMinutes / 60
+            val m = totalGonflageMinutes % 60
+            return if (m == 0) "${h}h" else "${h}h${m.toString().padStart(2, '0')}"
+        }
+
+    val validatedSkillsCount: Int
+        get() = listOf(
+            skillPrevol, skillGonflageFace, skillGonflageDos, skillMoteurSol,
+            skillDecoAutonome, skillViragesAltitude, skillPanneMoteur, skillAtterroPrecision,
+            skillNavigationAerologie, skillBrevetPilote, skillEmportPassager
+        ).count { it }
+
+    val totalSkillsCount: Int get() = 11
+
+    val completionPercent: Int
+        get() = ((validatedSkillsCount.toFloat() / totalSkillsCount.toFloat()) * 100).toInt()
+}
 
 @Entity(
     tableName = "bookings",

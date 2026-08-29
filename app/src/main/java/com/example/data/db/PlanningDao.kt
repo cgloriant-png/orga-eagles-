@@ -116,4 +116,23 @@ interface PlanningDao {
 
     @Query("UPDATE students SET completedSessions = completedSessions + 1 WHERE id = :studentId")
     suspend fun incrementCompletedSessions(studentId: Long)
+
+    // --- Student Progress (Livret FFPLUM) ---
+    @Query("SELECT * FROM student_progress WHERE studentId = :studentId LIMIT 1")
+    fun getStudentProgress(studentId: Long): Flow<com.example.data.model.StudentProgressEntity?>
+
+    @Query("SELECT * FROM student_progress WHERE studentId = :studentId LIMIT 1")
+    suspend fun getStudentProgressSync(studentId: Long): com.example.data.model.StudentProgressEntity?
+
+    @Query("SELECT * FROM student_progress")
+    fun getAllStudentProgress(): Flow<List<com.example.data.model.StudentProgressEntity>>
+
+    @Query("SELECT * FROM student_progress")
+    suspend fun getAllStudentProgressList(): List<com.example.data.model.StudentProgressEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdateProgress(progress: com.example.data.model.StudentProgressEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllProgress(progressList: List<com.example.data.model.StudentProgressEntity>)
 }
