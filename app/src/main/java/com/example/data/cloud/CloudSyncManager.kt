@@ -1,11 +1,13 @@
 package com.example.data.cloud
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import com.example.data.db.PlanningDao
 import com.example.data.model.BookingEntity
 import com.example.data.model.LessonSlotEntity
 import com.example.data.model.StudentEntity
+import com.example.data.model.StudentProgressEntity
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,10 +21,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 enum class SyncStatus {
     OFFLINE,
@@ -39,16 +45,26 @@ class CloudSyncManager(
 ) {
     private val TAG = "CloudSyncManager"
 
-    // Multi-device synchronized cloud topic
-    private val SYNC_TOPIC = "paramoteur_planning_sync_v5"
-    private val NTFY_BASE_URL = "https://ntfy.sh/$SYNC_TOPIC"
-
-    private val prefs = context.getSharedPreferences("paramoteur_sync_prefs_v5", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("paramoteur_sync_prefs_v6", Context.MODE_PRIVATE)
 
     // Unique device ID to identify senders and prevent infinite loops
     private val myDeviceId: String = prefs.getString("device_id", null) ?: UUID.randomUUID().toString().also {
         prefs.edit().putString("device_id", it).apply()
     }
+
+    // Configurable School / Club Code
+    private val _schoolCode = MutableStateFlow(
+        prefs.getString("school_code", "PLOUHARNEL") ?: "PLOUHARNEL"
+    )
+    val schoolCode: StateFlow<String> = _schoolCode.asStateFlow()
+
+    private fun getSanitizedTopic(code: String): String {
+        val clean = code.trim().lowercase().replace("[^a-z0-9_]".toRegex(), "")
+        return if (clean.isBlank()) "paramoteur_plouharnel_v6" else "paramoteur_${clean}_v6"
+    }
+
+    private var currentTopic: String = getSanitizedTopic(_schoolCode.value)
+    private fun getNtfyUrl() = "https://ntfy.sh/$currentTopic"
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(6, TimeUnit.SECONDS)
@@ -63,21 +79,151 @@ class CloudSyncManager(
         .retryOnConnectionFailure(true)
         .build()
 
-    private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
-
     private val _syncStatus = MutableStateFlow(SyncStatus.CONNECTING)
     val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
 
-    private val _statusMessage = MutableStateFlow("Connexion au Cloud...")
+    private val _statusMessage = MutableStateFlow("Connexion au Cloud (${_schoolCode.value})...")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
     private val _lastSyncTime = MutableStateFlow<String>("")
     val lastSyncTime: StateFlow<String> = _lastSyncTime.asStateFlow()
 
+    private val _syncedSlotsCount = MutableStateFlow(0)
+    val syncedSlotsCount: StateFlow<Int> = _syncedSlotsCount.asStateFlow()
+
+    private val _syncedStudentsCount = MutableStateFlow(0)
+    val syncedStudentsCount: StateFlow<Int> = _syncedStudentsCount.asStateFlow()
+
+    private val _syncedBookingsCount = MutableStateFlow(0)
+    val syncedBookingsCount: StateFlow<Int> = _syncedBookingsCount.asStateFlow()
+
     private val syncMutex = Mutex()
     private var syncJob: Job? = null
     private var sseJob: Job? = null
     private var pendingPushJob: Job? = null
+
+    init {
+        startSyncLoops()
+    }
+
+    fun setSchoolCode(newCode: String) {
+        val clean = newCode.trim().uppercase()
+        if (clean.isNotBlank() && clean != _schoolCode.value) {
+            _schoolCode.value = clean
+            prefs.edit().putString("school_code", clean).apply()
+            currentTopic = getSanitizedTopic(clean)
+            _statusMessage.value = "Connexion à $clean..."
+            restartSyncLoops()
+            forceSyncNow()
+        }
+    }
+
+    private fun restartSyncLoops() {
+        syncJob?.cancel()
+        sseJob?.cancel()
+        startSyncLoops()
+    }
+
+    private fun startSyncLoops() {
+        // 1. Initial immediate sync + periodic background polling (every 3 seconds)
+        syncJob?.cancel()
+        syncJob = scope.launch(Dispatchers.IO) {
+            delay(100)
+            syncFromCloud()
+
+            while (isActive) {
+                delay(3500)
+                try {
+                    syncFromCloud()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Periodic sync loop error: ${e.message}")
+                }
+            }
+        }
+
+        // 2. Real-time Server-Sent Events (SSE) stream for instant sub-second synchronization
+        sseJob?.cancel()
+        sseJob = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                try {
+                    val streamUrl = "${getNtfyUrl()}/sse"
+                    val streamRequest = Request.Builder()
+                        .url(streamUrl)
+                        .build()
+
+                    val response = sseClient.newCall(streamRequest).execute()
+                    val reader = BufferedReader(InputStreamReader(response.body?.byteStream()))
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null && isActive) {
+                        val currentLine = line ?: continue
+                        if (currentLine.startsWith("data:")) {
+                            val dataContent = currentLine.removePrefix("data:").trim()
+                            if (dataContent.isNotBlank()) {
+                                handleIncomingNtfyEvent(dataContent)
+                            }
+                        }
+                    }
+                    response.close()
+                } catch (e: Exception) {
+                    delay(3000)
+                }
+            }
+        }
+    }
+
+    private fun compressPayload(jsonStr: String): String {
+        return try {
+            if (jsonStr.length < 1200) {
+                jsonStr // Plain JSON is fine for small payloads
+            } else {
+                val bos = ByteArrayOutputStream()
+                GZIPOutputStream(bos).use { it.write(jsonStr.toByteArray(Charsets.UTF_8)) }
+                "GZ:" + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)
+            }
+        } catch (e: Exception) {
+            jsonStr
+        }
+    }
+
+    private fun decompressPayload(payload: String): String {
+        return try {
+            if (payload.startsWith("GZ:")) {
+                val base64Data = payload.removePrefix("GZ:")
+                val bytes = Base64.decode(base64Data, Base64.DEFAULT)
+                val bis = ByteArrayInputStream(bytes)
+                GZIPInputStream(bis).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } else {
+                payload
+            }
+        } catch (e: Exception) {
+            payload
+        }
+    }
+
+    private suspend fun handleIncomingNtfyEvent(dataContent: String) {
+        try {
+            val ntfyObj = JSONObject(dataContent)
+            val eventType = ntfyObj.optString("event", "")
+            if (eventType != "message") return
+
+            val rawMessage = ntfyObj.optString("message", "")
+            if (rawMessage.isBlank()) return
+
+            val decompressed = decompressPayload(rawMessage)
+            if (decompressed.startsWith("{") && decompressed.contains("\"slots\"")) {
+                val snapshotJson = JSONObject(decompressed)
+                val sender = snapshotJson.optString("senderId", "")
+                if (sender == myDeviceId) return // Own echo
+
+                mergeSnapshotIntoLocalDb(snapshotJson)
+            } else {
+                // Ping notification -> poll full cloud state
+                syncFromCloud()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "handleIncomingNtfyEvent error: ${e.message}")
+        }
+    }
 
     fun recordDeletedId(type: String, id: Long) {
         val currentSet = prefs.getStringSet("deleted_$type", emptySet())?.toMutableSet() ?: mutableSetOf()
@@ -110,112 +256,10 @@ class CloudSyncManager(
         }
     }
 
-    init {
-        startSyncLoops()
-    }
-
-    private fun startSyncLoops() {
-        // 1. Initial immediate sync + periodic background polling (every 4 seconds)
-        syncJob?.cancel()
-        syncJob = scope.launch(Dispatchers.IO) {
-            delay(150)
-            syncFromCloud()
-
-            while (isActive) {
-                delay(4000)
-                try {
-                    syncFromCloud()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Periodic sync loop error: ${e.message}")
-                }
-            }
-        }
-
-        // 2. Real-time Server-Sent Events (SSE) stream for instant sub-second synchronization
-        sseJob?.cancel()
-        sseJob = scope.launch(Dispatchers.IO) {
-            while (isActive) {
-                try {
-                    val streamRequest = Request.Builder()
-                        .url("$NTFY_BASE_URL/sse")
-                        .build()
-
-                    val response = sseClient.newCall(streamRequest).execute()
-                    val reader = BufferedReader(InputStreamReader(response.body?.byteStream()))
-                    var line: String?
-                    while (reader.readLine().also { line = it } != null && isActive) {
-                        val currentLine = line ?: continue
-                        if (currentLine.startsWith("data:")) {
-                            val dataContent = currentLine.removePrefix("data:").trim()
-                            if (dataContent.isNotBlank()) {
-                                handleIncomingNtfyEvent(dataContent)
-                            }
-                        }
-                    }
-                    response.close()
-                } catch (e: Exception) {
-                    delay(3000)
-                }
-            }
-        }
-    }
-
-    private suspend fun handleIncomingNtfyEvent(dataContent: String) {
-        try {
-            val ntfyObj = JSONObject(dataContent)
-            val eventType = ntfyObj.optString("event", "")
-            if (eventType != "message") return
-
-            val messageString = ntfyObj.optString("message", "")
-            val attachmentObj = ntfyObj.optJSONObject("attachment")
-            val attachmentUrl = attachmentObj?.optString("url", "")
-
-            var snapshotJson: JSONObject? = null
-
-            // 1. Check direct message payload
-            if (messageString.startsWith("{") && messageString.contains("\"slots\"")) {
-                val directObj = JSONObject(messageString)
-                val sender = directObj.optString("senderId", "")
-                if (sender == myDeviceId) return // Own echo
-                snapshotJson = directObj
-            }
-            // 2. Or download attachment payload if provided
-            else if (!attachmentUrl.isNullOrBlank()) {
-                try {
-                    val getReq = Request.Builder().url(attachmentUrl).get().build()
-                    val resp = httpClient.newCall(getReq).execute()
-                    if (resp.isSuccessful) {
-                        val bodyText = resp.body?.string() ?: ""
-                        resp.close()
-                        if (bodyText.isNotBlank()) {
-                            val dlObj = JSONObject(bodyText)
-                            val sender = dlObj.optString("senderId", "")
-                            if (sender == myDeviceId) return // Own echo
-                            snapshotJson = dlObj
-                        }
-                    } else {
-                        resp.close()
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error downloading attachment: ${e.message}")
-                }
-            }
-
-            if (snapshotJson != null) {
-                mergeSnapshotIntoLocalDb(snapshotJson)
-            } else {
-                // Generic notification ping -> poll full cloud state
-                syncFromCloud()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "handleIncomingNtfyEvent error: ${e.message}")
-        }
-    }
-
     fun forceSyncNow() {
         scope.launch(Dispatchers.IO) {
             _syncStatus.value = SyncStatus.SYNCING
-            _statusMessage.value = "Synchronisation..."
+            _statusMessage.value = "Synchronisation en cours..."
             syncFromCloud(forcePushMerged = true)
         }
     }
@@ -226,11 +270,12 @@ class CloudSyncManager(
     suspend fun syncFromCloud(forcePushMerged: Boolean = false) {
         syncMutex.withLock {
             try {
-                // Poll recent topic messages
                 var remoteSnapshot: JSONObject? = null
+                val pollUrl = "${getNtfyUrl()}/json?poll=1&since=all"
+
                 try {
                     val pollReq = Request.Builder()
-                        .url("$NTFY_BASE_URL/json?poll=1")
+                        .url(pollUrl)
                         .get()
                         .build()
                     val pollResp = httpClient.newCall(pollReq).execute()
@@ -243,25 +288,12 @@ class CloudSyncManager(
                         for (line in lines.reversed()) {
                             try {
                                 val msgObj = JSONObject(line)
-                                val msgStr = msgObj.optString("message", "")
-                                val attObj = msgObj.optJSONObject("attachment")
-                                val attUrl = attObj?.optString("url", "")
-
-                                if (msgStr.startsWith("{") && msgStr.contains("\"slots\"")) {
-                                    remoteSnapshot = JSONObject(msgStr)
-                                    break
-                                } else if (!attUrl.isNullOrBlank()) {
-                                    val getReq = Request.Builder().url(attUrl).get().build()
-                                    val attResp = httpClient.newCall(getReq).execute()
-                                    if (attResp.isSuccessful) {
-                                        val attBody = attResp.body?.string() ?: ""
-                                        attResp.close()
-                                        if (attBody.isNotBlank()) {
-                                            remoteSnapshot = JSONObject(attBody)
-                                            break
-                                        }
-                                    } else {
-                                        attResp.close()
+                                val rawMsg = msgObj.optString("message", "")
+                                if (rawMsg.isNotBlank()) {
+                                    val decompressed = decompressPayload(rawMsg)
+                                    if (decompressed.startsWith("{") && decompressed.contains("\"slots\"")) {
+                                        remoteSnapshot = JSONObject(decompressed)
+                                        break
                                     }
                                 }
                             } catch (ignored: Exception) {}
@@ -279,8 +311,16 @@ class CloudSyncManager(
                     pushSnapshotToCloudInternal()
                 }
 
+                val totalSlots = dao.getSlotsCount()
+                val totalStudents = dao.getStudentsCount()
+                val totalBookings = dao.getAllBookingsList().size
+
+                _syncedSlotsCount.value = totalSlots
+                _syncedStudentsCount.value = totalStudents
+                _syncedBookingsCount.value = totalBookings
+
                 _syncStatus.value = SyncStatus.CONNECTED_SYNCED
-                _statusMessage.value = "Synchronisé en direct"
+                _statusMessage.value = "En direct (${_schoolCode.value})"
                 val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.FRANCE)
                 _lastSyncTime.value = timeFormat.format(Date())
 
@@ -298,7 +338,7 @@ class CloudSyncManager(
         val localBookings = dao.getAllBookingsList()
 
         if (remoteJson == null) {
-            // No remote state found; local data is brand new
+            // No remote state found; local data is the initial state
             return localSlots.isNotEmpty() || localStudents.isNotEmpty() || localBookings.isNotEmpty()
         }
 
@@ -417,13 +457,13 @@ class CloudSyncManager(
 
         // 5. Parse and upsert remote student progress
         val remoteProgressArray = remoteJson.optJSONArray("progress") ?: JSONArray()
-        val remoteProgressList = mutableListOf<com.example.data.model.StudentProgressEntity>()
+        val remoteProgressList = mutableListOf<StudentProgressEntity>()
         for (i in 0 until remoteProgressArray.length()) {
             val pr = remoteProgressArray.getJSONObject(i)
             val studentId = pr.optLong("studentId")
             if (studentId !in allDeletedStudents) {
                 remoteProgressList.add(
-                    com.example.data.model.StudentProgressEntity(
+                    StudentProgressEntity(
                         studentId = studentId,
                         totalFlightMinutes = pr.optInt("totalFlightMinutes", 0),
                         totalFlightsCount = pr.optInt("totalFlightsCount", 0),
@@ -476,7 +516,7 @@ class CloudSyncManager(
         } else {
             pendingPushJob?.cancel()
             pendingPushJob = scope.launch(Dispatchers.IO) {
-                delay(80)
+                delay(60)
                 syncMutex.withLock {
                     pushSnapshotToCloudInternal()
                 }
@@ -586,7 +626,8 @@ class CloudSyncManager(
             deletedStudentIds.forEach { deletedStudentsJson.put(it) }
 
             val payload = JSONObject()
-            payload.put("version", 5)
+            payload.put("version", 6)
+            payload.put("schoolCode", _schoolCode.value)
             payload.put("senderId", myDeviceId)
             payload.put("lastUpdated", System.currentTimeMillis())
             payload.put("slots", slotsArray)
@@ -598,35 +639,26 @@ class CloudSyncManager(
             payload.put("deletedStudentIds", deletedStudentsJson)
 
             val payloadString = payload.toString()
+            val compressed = compressPayload(payloadString)
 
-            // 1. Upload persistent attachment snapshot (cached on NTFY server for 12+ hours)
-            val putBody = payloadString.toRequestBody("application/json; charset=utf-8".toMediaType())
-            val putReq = Request.Builder()
-                .url(NTFY_BASE_URL)
-                .addHeader("Filename", "sync.json")
+            val postBody = compressed.toRequestBody("text/plain; charset=utf-8".toMediaType())
+            val postReq = Request.Builder()
+                .url(getNtfyUrl())
                 .addHeader("Title", "ParamoteurSync")
+                .addHeader("Priority", "high")
                 .addHeader("Tags", "cloud,sync")
-                .put(putBody)
+                .post(postBody)
                 .build()
 
-            val putResp = httpClient.newCall(putReq).execute()
-            putResp.close()
+            val postResp = httpClient.newCall(postReq).execute()
+            postResp.close()
 
-            // 2. If payload fits directly in inline message (< 3800 bytes), also POST inline message for instant SSE parsing
-            if (payloadString.length < 3800) {
-                val postBody = payloadString.toRequestBody("text/plain; charset=utf-8".toMediaType())
-                val postReq = Request.Builder()
-                    .url(NTFY_BASE_URL)
-                    .addHeader("Title", "ParamoteurSyncDirect")
-                    .addHeader("Tags", "sync")
-                    .post(postBody)
-                    .build()
-                val postResp = httpClient.newCall(postReq).execute()
-                postResp.close()
-            }
+            _syncedSlotsCount.value = slots.size
+            _syncedStudentsCount.value = students.size
+            _syncedBookingsCount.value = bookings.size
 
             _syncStatus.value = SyncStatus.CONNECTED_SYNCED
-            _statusMessage.value = "Synchronisé en direct"
+            _statusMessage.value = "En direct (${_schoolCode.value})"
             val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.FRANCE)
             _lastSyncTime.value = timeFormat.format(Date())
 

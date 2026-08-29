@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,6 +66,10 @@ class MainActivity : ComponentActivity() {
                 val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
                 val syncStatusMsg by viewModel.syncStatusMessage.collectAsStateWithLifecycle()
                 val lastSyncTime by viewModel.lastSyncTime.collectAsStateWithLifecycle()
+                val schoolCode by viewModel.schoolCode.collectAsStateWithLifecycle()
+                val syncedSlotsCount by viewModel.syncedSlotsCount.collectAsStateWithLifecycle()
+                val syncedStudentsCount by viewModel.syncedStudentsCount.collectAsStateWithLifecycle()
+                val syncedBookingsCount by viewModel.syncedBookingsCount.collectAsStateWithLifecycle()
 
                 // Filter States
                 val selectedDateFilter by viewModel.selectedDateFilter.collectAsStateWithLifecycle()
@@ -77,6 +82,7 @@ class MainActivity : ComponentActivity() {
                 var showAddSlotDialog by remember { mutableStateOf(false) }
                 var showStandardDayDialog by remember { mutableStateOf(false) }
                 var showPinSettingsDialog by remember { mutableStateOf(false) }
+                var showSyncSettingsDialog by remember { mutableStateOf(false) }
                 var dateForStandardDay by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
                 var initialDateForSlotDialog by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
                 var slotToEdit by remember { mutableStateOf<LessonSlotEntity?>(null) }
@@ -156,8 +162,16 @@ class MainActivity : ComponentActivity() {
                         syncStatus = syncStatus,
                         syncStatusMsg = syncStatusMsg,
                         lastSyncTime = lastSyncTime,
+                        schoolCode = schoolCode,
+                        onSaveSchoolCode = { viewModel.setSchoolCode(it) },
+                        syncedSlotsCount = syncedSlotsCount,
+                        syncedStudentsCount = syncedStudentsCount,
+                        syncedBookingsCount = syncedBookingsCount,
                         onForceSync = {
                             viewModel.forceSync()
+                        },
+                        onShareSchoolCode = {
+                            openWhatsAppDirect(viewModel.generateSchoolShareText())
                         }
                     )
                 } else {
@@ -220,7 +234,8 @@ class MainActivity : ComponentActivity() {
                                                 Surface(
                                                     shape = RoundedCornerShape(10.dp),
                                                     color = statusBgColor,
-                                                    border = BorderStroke(1.dp, statusBorderColor)
+                                                    border = BorderStroke(1.dp, statusBorderColor),
+                                                    modifier = Modifier.clickable { showSyncSettingsDialog = true }
                                                 ) {
                                                     Row(
                                                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
@@ -237,14 +252,22 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                             Text(
-                                                "Gonflage • Vol • Perf",
+                                                "École: $schoolCode • Gonflage & Vol",
                                                 fontSize = 11.sp,
-                                                color = Color.White.copy(alpha = 0.75f)
+                                                color = Color.White.copy(alpha = 0.85f)
                                             )
                                         }
                                     }
 
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        // Sync settings dialog button
+                                        IconButton(
+                                            onClick = { showSyncSettingsDialog = true },
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Icon(Icons.Default.CloudSync, contentDescription = "Paramètres de synchronisation", tint = Color.White)
+                                        }
+
                                         // Refresh / Force Sync button
                                         IconButton(
                                             onClick = { viewModel.forceSync() },
@@ -772,6 +795,22 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+
+                // Dialog: Cloud Sync & Multi-device Settings
+                SyncSettingsDialog(
+                    isOpen = showSyncSettingsDialog,
+                    onDismiss = { showSyncSettingsDialog = false },
+                    currentSchoolCode = schoolCode,
+                    onSaveSchoolCode = { viewModel.setSchoolCode(it) },
+                    syncStatus = syncStatus,
+                    syncStatusMsg = syncStatusMsg,
+                    lastSyncTime = lastSyncTime,
+                    syncedSlotsCount = syncedSlotsCount,
+                    syncedStudentsCount = syncedStudentsCount,
+                    syncedBookingsCount = syncedBookingsCount,
+                    onForceSync = { viewModel.forceSync() },
+                    onShareSchoolCode = { openWhatsAppDirect(viewModel.generateSchoolShareText()) }
+                )
             }
         }
     }

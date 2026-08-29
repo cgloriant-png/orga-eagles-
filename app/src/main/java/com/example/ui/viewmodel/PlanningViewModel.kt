@@ -22,6 +22,10 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     val syncStatus: StateFlow<SyncStatus>
     val syncStatusMessage: StateFlow<String>
     val lastSyncTime: StateFlow<String>
+    val schoolCode: StateFlow<String>
+    val syncedSlotsCount: StateFlow<Int>
+    val syncedStudentsCount: StateFlow<Int>
+    val syncedBookingsCount: StateFlow<Int>
 
     // Base data flows
     val allStudents: StateFlow<List<StudentEntity>>
@@ -104,6 +108,10 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
         syncStatus = cloudSyncManager.syncStatus
         syncStatusMessage = cloudSyncManager.statusMessage
         lastSyncTime = cloudSyncManager.lastSyncTime
+        schoolCode = cloudSyncManager.schoolCode
+        syncedSlotsCount = cloudSyncManager.syncedSlotsCount
+        syncedStudentsCount = cloudSyncManager.syncedStudentsCount
+        syncedBookingsCount = cloudSyncManager.syncedBookingsCount
 
         allStudents = repository.allStudents
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -149,6 +157,27 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
             cloudSyncManager.forceSyncNow()
             _feedbackMessage.emit("🔄 Synchronisation Cloud effectuée")
         }
+    }
+
+    fun setSchoolCode(newCode: String) {
+        cloudSyncManager.setSchoolCode(newCode)
+        viewModelScope.launch {
+            _feedbackMessage.emit("Code École mis à jour : ${newCode.trim().uppercase()}")
+        }
+    }
+
+    fun generateSchoolShareText(): String {
+        val code = schoolCode.value
+        return """
+            🪂 *PLANNING PARAMOTEUR - CODE SYNCHRO ÉCOLE* 🪂
+            Pour synchroniser votre planning et réserver vos séances de gonflage et de vol en direct :
+            
+            1. Ouvrez l'application *Planning Paramoteur*
+            2. Cliquez sur l'indicateur de synchronisation en haut (ou paramètres)
+            3. Entrez le Code École : *${code}*
+            
+            Vos inscriptions et créneaux seront automatiquement synchronisés en direct avec l'école !
+        """.trimIndent()
     }
 
     fun saveDefaultStandardDayConfig(config: StandardDayConfig) {

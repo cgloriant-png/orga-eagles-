@@ -71,7 +71,13 @@ fun StudentPortalScreen(
     syncStatus: SyncStatus = SyncStatus.CONNECTED_SYNCED,
     syncStatusMsg: String = "En direct",
     lastSyncTime: String = "",
+    schoolCode: String = "PLOUHARNEL",
+    onSaveSchoolCode: (String) -> Unit = {},
+    syncedSlotsCount: Int = 0,
+    syncedStudentsCount: Int = 0,
+    syncedBookingsCount: Int = 0,
     onForceSync: () -> Unit = {},
+    onShareSchoolCode: () -> Unit = {},
     allProgress: List<StudentProgressEntity> = emptyList(),
     onExportStudentBookletPdf: ((StudentEntity) -> Unit)? = null,
     onExportStudentBookletIcs: ((StudentEntity) -> Unit)? = null
@@ -86,6 +92,7 @@ fun StudentPortalScreen(
     var slotToRegister by remember { mutableStateOf<SlotWithBookings?>(null) }
     var selectedDayForDetail by remember { mutableStateOf<String?>(null) }
     var showPinDialog by remember { mutableStateOf(false) }
+    var showSyncSettingsDialog by remember { mutableStateOf(false) }
 
     // Visual Calendar sub-mode (Mois, Trimestre, Année)
     var calendarViewMode by remember { mutableStateOf(PlanningViewMode.MOIS) }
@@ -220,7 +227,7 @@ fun StudentPortalScreen(
                                         shape = RoundedCornerShape(10.dp),
                                         color = pillStyle.bgColor,
                                         border = BorderStroke(1.dp, pillStyle.borderColor),
-                                        modifier = Modifier.clickable { onForceSync() }
+                                        modifier = Modifier.clickable { showSyncSettingsDialog = true }
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
@@ -236,17 +243,17 @@ fun StudentPortalScreen(
                                         }
                                     }
                                 }
-                                Text("Inscriptions & Planning", fontSize = 11.sp, color = Color.White.copy(alpha = 0.75f))
+                                Text("École: $schoolCode • Inscriptions en direct", fontSize = 11.sp, color = Color.White.copy(alpha = 0.85f))
                             }
                         }
 
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            // Sync button
+                            // Sync settings button
                             IconButton(
-                                onClick = onForceSync,
+                                onClick = { showSyncSettingsDialog = true },
                                 modifier = Modifier.size(32.dp)
                             ) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Actualiser", tint = Color.White)
+                                Icon(Icons.Default.CloudSync, contentDescription = "Paramètres de synchronisation", tint = Color.White)
                             }
 
                             // Moniteur Access button with PIN Lock
@@ -1277,6 +1284,22 @@ fun StudentPortalScreen(
             containerColor = HighDensitySurface
         )
     }
+
+    // Sync Settings Dialog
+    SyncSettingsDialog(
+        isOpen = showSyncSettingsDialog,
+        onDismiss = { showSyncSettingsDialog = false },
+        currentSchoolCode = schoolCode,
+        onSaveSchoolCode = onSaveSchoolCode,
+        syncStatus = syncStatus,
+        syncStatusMsg = syncStatusMsg,
+        lastSyncTime = lastSyncTime,
+        syncedSlotsCount = syncedSlotsCount,
+        syncedStudentsCount = syncedStudentsCount,
+        syncedBookingsCount = syncedBookingsCount,
+        onForceSync = onForceSync,
+        onShareSchoolCode = onShareSchoolCode
+    )
 }
 
 @Composable
