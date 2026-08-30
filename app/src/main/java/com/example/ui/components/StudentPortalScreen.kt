@@ -1109,14 +1109,14 @@ fun StudentPortalScreen(
             onDismissRequest = { showPinDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("🔒", fontSize = 20.sp)
-                    Text("Accès Mode Moniteur", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = PrimaryBlue)
+                    Text("Accès Espace Moniteur", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Cet espace est réservé au moniteur (gestion des élèves, validation des présences, création et modification de créneaux).\n\nCode PIN par défaut : 1234",
+                        "Cet espace d'administration est strictement réservé au moniteur / responsable de l'école.\n\nVeuillez saisir votre code PIN secret :",
                         fontSize = 12.sp,
                         color = SecondaryText
                     )
@@ -1129,8 +1129,8 @@ fun StudentPortalScreen(
                                 isPinError = false
                             }
                         },
-                        label = { Text("Code PIN Moniteur (1234)") },
-                        placeholder = { Text("1234") },
+                        label = { Text("Code PIN secret") },
+                        placeholder = { Text("• • • •") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         visualTransformation = PasswordVisualTransformation(),
@@ -1141,32 +1141,18 @@ fun StudentPortalScreen(
 
                     if (isPinError) {
                         Text(
-                            "❌ Code PIN incorrect (Code par défaut : 1234)",
+                            "❌ Code PIN incorrect. Veuillez réessayer.",
                             fontSize = 11.sp,
                             color = RedAlertText,
                             fontWeight = FontWeight.Bold
                         )
-                    }
-
-                    // Direct Access / Quick Unlock button
-                    OutlinedButton(
-                        onClick = {
-                            showPinDialog = false
-                            onSwitchToInstructorMode()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryBlue)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Accès direct (Déverrouiller avec 1234)", fontSize = 12.sp, color = PrimaryBlue)
                     }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        if (enteredPin.isBlank() || onVerifyPin(enteredPin)) {
+                        if (onVerifyPin(enteredPin)) {
                             showPinDialog = false
                             onSwitchToInstructorMode()
                         } else {
@@ -1176,7 +1162,7 @@ fun StudentPortalScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Valider", fontWeight = FontWeight.Bold)
+                    Text("Déverrouiller", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
