@@ -25,7 +25,8 @@ import com.example.ui.theme.*
 
 @Composable
 fun AddOrEditSlotDialog(
-    initialDate: String,
+    initialDate: String = "",
+    selectedDates: List<String> = emptyList(),
     initialSlot: com.example.data.model.LessonSlotEntity? = null,
     onDismiss: () -> Unit,
     onConfirm: (
@@ -37,9 +38,24 @@ fun AddOrEditSlotDialog(
         location: String,
         maxCapacity: Int,
         notes: String
-    ) -> Unit
+    ) -> Unit,
+    onConfirmForDates: ((
+        dates: List<String>,
+        startTime: String,
+        endTime: String,
+        title: String,
+        lessonType: String,
+        location: String,
+        maxCapacity: Int,
+        notes: String
+    ) -> Unit)? = null
 ) {
-    var dateIso by remember { mutableStateOf(initialSlot?.dateIso ?: initialDate) }
+    val datesList = remember(initialDate, selectedDates) {
+        if (selectedDates.isNotEmpty()) selectedDates else if (initialDate.isNotBlank()) listOf(initialDate) else listOf(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.FRANCE).format(java.util.Date()))
+    }
+    val isMultiDate = datesList.size > 1
+
+    var dateIso by remember { mutableStateOf(initialSlot?.dateIso ?: datesList.firstOrNull() ?: initialDate) }
     var startTime by remember { mutableStateOf(initialSlot?.startTime ?: "08:00") }
     var endTime by remember { mutableStateOf(initialSlot?.endTime ?: "11:30") }
     var title by remember { mutableStateOf(initialSlot?.title ?: "") }
@@ -49,19 +65,29 @@ fun AddOrEditSlotDialog(
             else PlanningLessonType.GONFLAGE
         )
     }
-    var location by remember { mutableStateOf(initialSlot?.location ?: "Terrain de décollage") }
+    var location by remember { mutableStateOf(initialSlot?.location ?: "Plouharnel (56)") }
     var maxCapacity by remember { mutableIntStateOf(initialSlot?.maxCapacity ?: selectedType.defaultCapacity) }
     var notes by remember { mutableStateOf(initialSlot?.notes ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                if (initialSlot == null) "Créer un créneau" else "Modifier le créneau",
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp,
-                color = HighDensityHeaderTitle
-            )
+            Column {
+                Text(
+                    if (isMultiDate) "Créer un créneau sur ${datesList.size} jours" else if (initialSlot == null) "Créer un créneau" else "Modifier le créneau",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = HighDensityHeaderTitle
+                )
+                if (isMultiDate) {
+                    Text(
+                        "${datesList.size} dates sélectionnées",
+                        fontSize = 12.sp,
+                        color = PrimaryBlue,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         },
         text = {
             Column(
@@ -70,6 +96,20 @@ fun AddOrEditSlotDialog(
                     .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (isMultiDate) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = HighDensityNavBar,
+                        border = BorderStroke(0.5.dp, PrimaryBlue.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("📅 Dates concernées :", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = HighDensityHeaderTitle)
+                            Text(datesList.joinToString(", "), fontSize = 10.sp, color = PrimaryBlue)
+                        }
+                    }
+                }
+
                 // Type Selector: Gonflage, Vol, Perf
                 Text("Type de créneau :", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Row(
@@ -108,14 +148,16 @@ fun AddOrEditSlotDialog(
                     }
                 }
 
-                // Date & Time Inputs
-                OutlinedTextField(
-                    value = dateIso,
-                    onValueChange = { dateIso = it },
-                    label = { Text("Date (AAAA-MM-JJ)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (!isMultiDate) {
+                    // Date & Time Inputs
+                    OutlinedTextField(
+                        value = dateIso,
+                        onValueChange = { dateIso = it },
+                        label = { Text("Date (AAAA-MM-JJ)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -182,20 +224,35 @@ fun AddOrEditSlotDialog(
             Button(
                 onClick = {
                     val finalTitle = title.ifBlank { "Créneau ${selectedType.label}" }
-                    onConfirm(
-                        dateIso,
-                        startTime,
-                        endTime,
-                        finalTitle,
-                        selectedType.code,
-                        location,
-                        maxCapacity,
-                        notes
-                    )
+                    if (isMultiDate && onConfirmForDates != null) {
+                        onConfirmForDates(
+                            datesList,
+                            startTime,
+                            endTime,
+                            finalTitle,
+                            selectedType.code,
+                            location,
+                            maxCapacity,
+                            notes
+                        )
+                    } else {
+                        onConfirm(
+                            dateIso,
+                            startTime,
+                            endTime,
+                            finalTitle,
+                            selectedType.code,
+                            location,
+                            maxCapacity,
+                            notes
+                        )
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
-                Text(if (initialSlot == null) "Créer le créneau" else "Enregistrer")
+                Text(
+                    if (isMultiDate) "Créer sur ${datesList.size} jours" else if (initialSlot == null) "Créer le créneau" else "Enregistrer"
+                )
             }
         },
         dismissButton = {

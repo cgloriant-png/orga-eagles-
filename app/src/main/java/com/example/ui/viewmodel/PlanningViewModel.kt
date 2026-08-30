@@ -335,6 +335,21 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun createStandardDayForDates(
+        dates: List<String>,
+        config: StandardDayConfig = StandardDayConfig()
+    ) {
+        if (dates.isEmpty()) return
+        viewModelScope.launch {
+            var totalSlots = 0
+            dates.forEach { dateIso ->
+                val ids = repository.createStandardDaySlots(dateIso, config)
+                totalSlots += ids.size
+            }
+            _feedbackMessage.emit("⚡ Journée Type appliquée sur ${dates.size} jours ($totalSlots créneaux créés) !")
+        }
+    }
+
     // --- Student Self-Registration (Version Élève) ---
     fun registerStudentSelf(
         slotId: Long,
@@ -395,6 +410,35 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
             )
             repository.createSlot(slot)
             _feedbackMessage.emit("Nouveau créneau créé avec succès !")
+        }
+    }
+
+    fun createSlotForDates(
+        dates: List<String>,
+        startTime: String,
+        endTime: String,
+        title: String,
+        lessonType: String,
+        location: String,
+        maxCapacity: Int,
+        notes: String
+    ) {
+        if (dates.isEmpty()) return
+        viewModelScope.launch {
+            dates.forEach { dateIso ->
+                val slot = LessonSlotEntity(
+                    dateIso = dateIso,
+                    startTime = startTime,
+                    endTime = endTime,
+                    title = title.ifBlank { "Créneau ${PlanningLessonType.fromCode(lessonType).label}" },
+                    lessonType = lessonType,
+                    location = location.ifBlank { "Terrain de décollage" },
+                    maxCapacity = maxCapacity.coerceAtLeast(1),
+                    notes = notes
+                )
+                repository.createSlot(slot)
+            }
+            _feedbackMessage.emit("✅ Créneau appliqué sur ${dates.size} jours !")
         }
     }
 

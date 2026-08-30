@@ -25,12 +25,19 @@ import java.util.Locale
 
 @Composable
 fun StandardDayDialog(
-    initialDateIso: String,
+    initialDateIso: String = "",
+    selectedDates: List<String> = emptyList(),
     initialConfig: StandardDayConfig = StandardDayConfig(),
     onDismiss: () -> Unit,
-    onConfirm: (dateIso: String, config: StandardDayConfig, saveAsDefault: Boolean) -> Unit
+    onConfirm: (dateIso: String, config: StandardDayConfig, saveAsDefault: Boolean) -> Unit,
+    onConfirmMultiple: ((dates: List<String>, config: StandardDayConfig, saveAsDefault: Boolean) -> Unit)? = null
 ) {
-    var dateIso by remember { mutableStateOf(initialDateIso) }
+    val datesList = remember(initialDateIso, selectedDates) {
+        if (selectedDates.isNotEmpty()) selectedDates else if (initialDateIso.isNotBlank()) listOf(initialDateIso) else listOf(java.text.SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(java.util.Date()))
+    }
+    val isMultiDate = datesList.size > 1
+
+    var dateIso by remember { mutableStateOf(datesList.firstOrNull() ?: initialDateIso) }
 
     // Compute astronomical sunrise / sunset for the initial date at Plouharnel (56)
     val autoSunTimes = remember(dateIso) {
@@ -82,8 +89,17 @@ fun StandardDayDialog(
             ) {
                 Text("⚡", fontSize = 22.sp)
                 Column {
-                    Text("Créer une Journée Type", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("Calcul éphémérides auto • Plouharnel (56)", fontSize = 11.sp, color = PrimaryBlue, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isMultiDate) "Créer Journée Type (${datesList.size} jours)" else "Créer une Journée Type",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                    Text(
+                        if (isMultiDate) "Éphémérides calculées automatiquement par jour" else "Calcul éphémérides auto • Plouharnel (56)",
+                        fontSize = 11.sp,
+                        color = PrimaryBlue,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         },
@@ -94,15 +110,44 @@ fun StandardDayDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Date input
-                OutlinedTextField(
-                    value = dateIso,
-                    onValueChange = { dateIso = it },
-                    label = { Text("Date de la séance (AAAA-MM-JJ)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                )
+                if (isMultiDate) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = HighDensityNavBar,
+                        border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "📅 ${datesList.size} jours sélectionnés :",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = HighDensityHeaderTitle
+                            )
+                            Text(
+                                datesList.joinToString(", "),
+                                fontSize = 11.sp,
+                                color = PrimaryBlue,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "Les 4 créneaux (Vol & Gonflage) seront automatiquement générés et adaptés aux heures solaires de chaque jour.",
+                                fontSize = 10.sp,
+                                color = SecondaryText
+                            )
+                        }
+                    }
+                } else {
+                    // Date input
+                    OutlinedTextField(
+                        value = dateIso,
+                        onValueChange = { dateIso = it },
+                        label = { Text("Date de la séance (AAAA-MM-JJ)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
 
                 // Ephemeris Auto Calculation Banner (Plouharnel 56)
                 Surface(
@@ -294,14 +339,21 @@ fun StandardDayDialog(
                         eveningVolCapacity = eveningVolCap,
                         location = location.ifBlank { "Plouharnel (56)" }
                     )
-                    onConfirm(dateIso, config, saveAsDefault)
+                    if (isMultiDate && onConfirmMultiple != null) {
+                        onConfirmMultiple(datesList, config, saveAsDefault)
+                    } else {
+                        onConfirm(dateIso, config, saveAsDefault)
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Générer la Journée Type (4 créneaux)", fontWeight = FontWeight.Bold)
+                Text(
+                    if (isMultiDate) "Appliquer sur les ${datesList.size} jours" else "Générer la Journée Type (4 créneaux)",
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         dismissButton = {

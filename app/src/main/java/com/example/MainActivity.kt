@@ -84,7 +84,9 @@ class MainActivity : ComponentActivity() {
                 var showPinSettingsDialog by remember { mutableStateOf(false) }
                 var showSyncSettingsDialog by remember { mutableStateOf(false) }
                 var dateForStandardDay by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
+                var datesForStandardDay by remember { mutableStateOf<List<String>>(emptyList()) }
                 var initialDateForSlotDialog by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
+                var datesForSlotDialog by remember { mutableStateOf<List<String>>(emptyList()) }
                 var slotToEdit by remember { mutableStateOf<LessonSlotEntity?>(null) }
                 var showAddStudentDialog by remember { mutableStateOf(false) }
                 var studentToEdit by remember { mutableStateOf<StudentEntity?>(null) }
@@ -439,6 +441,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onOpenAddSlotForDate = { dateIso ->
                                         slotToEdit = null
+                                        datesForSlotDialog = emptyList()
                                         initialDateForSlotDialog = dateIso
                                         showAddSlotDialog = true
                                     },
@@ -456,6 +459,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onEditSlot = { slot ->
                                         slotToEdit = slot
+                                        datesForSlotDialog = emptyList()
                                         initialDateForSlotDialog = slot.dateIso
                                         showAddSlotDialog = true
                                     },
@@ -463,7 +467,19 @@ class MainActivity : ComponentActivity() {
                                         viewModel.deleteSlot(slotId)
                                     },
                                     onOpenStandardDayForDate = { dateIso ->
+                                        datesForStandardDay = emptyList()
                                         dateForStandardDay = dateIso
+                                        showStandardDayDialog = true
+                                    },
+                                    onOpenMultiDayAddSlot = { dates ->
+                                        slotToEdit = null
+                                        datesForSlotDialog = dates
+                                        initialDateForSlotDialog = dates.firstOrNull() ?: SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())
+                                        showAddSlotDialog = true
+                                    },
+                                    onOpenMultiDayStandardDay = { dates ->
+                                        datesForStandardDay = dates
+                                        dateForStandardDay = dates.firstOrNull() ?: SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())
                                         showStandardDayDialog = true
                                     },
                                     onOpenWeatherAlert = { slotItem ->
@@ -585,14 +601,27 @@ class MainActivity : ComponentActivity() {
                 if (showStandardDayDialog) {
                     StandardDayDialog(
                         initialDateIso = dateForStandardDay,
+                        selectedDates = datesForStandardDay,
                         initialConfig = savedStandardDayConfig,
-                        onDismiss = { showStandardDayDialog = false },
+                        onDismiss = {
+                            showStandardDayDialog = false
+                            datesForStandardDay = emptyList()
+                        },
                         onConfirm = { dateIso, config, saveAsDefault ->
                             viewModel.createStandardDay(dateIso, config)
                             if (saveAsDefault) {
                                 viewModel.saveDefaultStandardDayConfig(config)
                             }
                             showStandardDayDialog = false
+                            datesForStandardDay = emptyList()
+                        },
+                        onConfirmMultiple = { dates, config, saveAsDefault ->
+                            viewModel.createStandardDayForDates(dates, config)
+                            if (saveAsDefault) {
+                                viewModel.saveDefaultStandardDayConfig(config)
+                            }
+                            showStandardDayDialog = false
+                            datesForStandardDay = emptyList()
                         }
                     )
                 }
@@ -665,14 +694,16 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Dialog: Add / Edit Single Slot
+                // Dialog: Add / Edit Single Slot or Multi-Day Slots
                 if (showAddSlotDialog) {
                     AddOrEditSlotDialog(
                         initialDate = initialDateForSlotDialog,
+                        selectedDates = datesForSlotDialog,
                         initialSlot = slotToEdit,
                         onDismiss = {
                             showAddSlotDialog = false
                             slotToEdit = null
+                            datesForSlotDialog = emptyList()
                         },
                         onConfirm = { dateIso, startTime, endTime, title, lessonType, location, maxCapacity, notes ->
                             if (slotToEdit == null) {
@@ -701,6 +732,22 @@ class MainActivity : ComponentActivity() {
                             }
                             showAddSlotDialog = false
                             slotToEdit = null
+                            datesForSlotDialog = emptyList()
+                        },
+                        onConfirmForDates = { dates, startTime, endTime, title, lessonType, location, maxCapacity, notes ->
+                            viewModel.createSlotForDates(
+                                dates = dates,
+                                startTime = startTime,
+                                endTime = endTime,
+                                title = title,
+                                lessonType = lessonType,
+                                location = location,
+                                maxCapacity = maxCapacity,
+                                notes = notes
+                            )
+                            showAddSlotDialog = false
+                            slotToEdit = null
+                            datesForSlotDialog = emptyList()
                         }
                     )
                 }

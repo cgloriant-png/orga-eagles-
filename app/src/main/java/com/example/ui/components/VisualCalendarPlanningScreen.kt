@@ -58,10 +58,15 @@ fun VisualCalendarPlanningScreen(
     onEditSlot: ((LessonSlotEntity) -> Unit)? = null,
     onDeleteSlot: ((Long) -> Unit)? = null,
     onOpenStandardDayForDate: ((String) -> Unit)? = null,
+    onOpenMultiDayAddSlot: ((List<String>) -> Unit)? = null,
+    onOpenMultiDayStandardDay: ((List<String>) -> Unit)? = null,
     onOpenWeatherAlert: ((SlotWithBookings) -> Unit)? = null,
     onAddToCalendar: ((SlotWithBookings) -> Unit)? = null
 ) {
-    var viewMode by remember { mutableStateOf(PlanningViewMode.SEMAINE) }
+    var viewMode by remember { mutableStateOf(PlanningViewMode.MOIS) }
+    var selectedDates by remember { mutableStateOf(setOf<String>()) }
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+
     val todayCal = Calendar.getInstance()
     var selectedYear by remember { mutableIntStateOf(todayCal.get(Calendar.YEAR)) }
     var selectedQuarter by remember { mutableIntStateOf((todayCal.get(Calendar.MONTH) / 3) + 1) } // 1..4
@@ -88,12 +93,72 @@ fun VisualCalendarPlanningScreen(
         slots.groupBy { it.slot.dateIso }
     }
 
+    val toggleDateSelection: (String) -> Unit = { date ->
+        selectedDates = if (selectedDates.contains(date)) {
+            selectedDates - date
+        } else {
+            selectedDates + date
+        }
+    }
+
+    val selectAllDaysInMonth: (Int, Int) -> Unit = { y, m ->
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, y)
+            set(Calendar.MONTH, m)
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
+        val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val monthDates = (1..maxDays).map { d ->
+            String.format(Locale.US, "%04d-%02d-%02d", y, m + 1, d)
+        }
+        selectedDates = selectedDates + monthDates
+        isMultiSelectMode = true
+    }
+
+    val selectWeekendsInMonth: (Int, Int) -> Unit = { y, m ->
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, y)
+            set(Calendar.MONTH, m)
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
+        val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val weekendDates = mutableListOf<String>()
+        for (d in 1..maxDays) {
+            cal.set(Calendar.DAY_OF_MONTH, d)
+            val dow = cal.get(Calendar.DAY_OF_WEEK)
+            if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) {
+                weekendDates.add(String.format(Locale.US, "%04d-%02d-%02d", y, m + 1, d))
+            }
+        }
+        selectedDates = selectedDates + weekendDates
+        isMultiSelectMode = true
+    }
+
+    val selectWeekdaysInMonth: (Int, Int) -> Unit = { y, m ->
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, y)
+            set(Calendar.MONTH, m)
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
+        val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val weekdayDates = mutableListOf<String>()
+        for (d in 1..maxDays) {
+            cal.set(Calendar.DAY_OF_MONTH, d)
+            val dow = cal.get(Calendar.DAY_OF_WEEK)
+            if (dow != Calendar.SATURDAY && dow != Calendar.SUNDAY) {
+                weekdayDates.add(String.format(Locale.US, "%04d-%02d-%02d", y, m + 1, d))
+            }
+        }
+        selectedDates = selectedDates + weekdayDates
+        isMultiSelectMode = true
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(HighDensityBg)
     ) {
-        // Top Toolbar: View Switcher (Journée / Semaine / Mois / Trimestre / Année) & WhatsApp
+        // Top Toolbar: View Switcher (Journée / Semaine / Mois / Trimestre / Année), Multi-select & WhatsApp
         Surface(
             color = HighDensitySurface,
             tonalElevation = 2.dp,
@@ -102,9 +167,9 @@ fun VisualCalendarPlanningScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
-                // View Mode Switcher
+                // View Mode Switcher + Multi-Select + WhatsApp
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -146,7 +211,41 @@ fun VisualCalendarPlanningScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Multi-selection Toggle Button
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isMultiSelectMode) PrimaryBlue else HighDensityNavBar,
+                        border = BorderStroke(1.dp, if (isMultiSelectMode) PrimaryBlue else BorderOutline.copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clickable {
+                                isMultiSelectMode = !isMultiSelectMode
+                                if (!isMultiSelectMode) selectedDates = emptySet()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                if (isMultiSelectMode) Icons.Default.Checklist else Icons.Default.ChecklistRtl,
+                                contentDescription = "Sélection multiple",
+                                tint = if (isMultiSelectMode) Color.White else PrimaryBlue,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                if (selectedDates.isNotEmpty()) "${selectedDates.size}j" else "Sélection",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isMultiSelectMode) Color.White else HighDensityHeaderTitle
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     // WhatsApp Action Button
                     Button(
@@ -328,9 +427,20 @@ fun VisualCalendarPlanningScreen(
                         year = selectedYear,
                         month = selectedMonth,
                         slotsByDate = slotsByDate,
+                        selectedDates = selectedDates,
+                        isMultiSelectMode = isMultiSelectMode,
+                        onToggleSelectDay = toggleDateSelection,
+                        onSelectAllInMonth = { selectAllDaysInMonth(selectedYear, selectedMonth) },
+                        onSelectWeekendsInMonth = { selectWeekendsInMonth(selectedYear, selectedMonth) },
+                        onSelectWeekdaysInMonth = { selectWeekdaysInMonth(selectedYear, selectedMonth) },
+                        onClearSelection = { selectedDates = emptySet() },
                         onSelectDay = { dateIso ->
-                            selectedDayIso = dateIso
-                            onSelectDay(dateIso)
+                            if (isMultiSelectMode) {
+                                toggleDateSelection(dateIso)
+                            } else {
+                                selectedDayIso = dateIso
+                                onSelectDay(dateIso)
+                            }
                         },
                         onOpenAddSlotForDate = onOpenAddSlotForDate
                     )
@@ -341,11 +451,21 @@ fun VisualCalendarPlanningScreen(
                         year = selectedYear,
                         quarter = selectedQuarter,
                         slotsByDate = slotsByDate,
+                        selectedDates = selectedDates,
+                        isMultiSelectMode = isMultiSelectMode,
+                        onToggleSelectDay = toggleDateSelection,
+                        onSelectAllInMonth = selectAllDaysInMonth,
                         onSelectMonth = { m ->
                             selectedMonth = m
                             viewMode = PlanningViewMode.MOIS
                         },
-                        onSelectDay = onSelectDay
+                        onSelectDay = { dateIso ->
+                            if (isMultiSelectMode) {
+                                toggleDateSelection(dateIso)
+                            } else {
+                                onSelectDay(dateIso)
+                            }
+                        }
                     )
                 }
 
@@ -353,11 +473,103 @@ fun VisualCalendarPlanningScreen(
                     AnnualView(
                         year = selectedYear,
                         slotsByDate = slotsByDate,
+                        selectedDates = selectedDates,
+                        isMultiSelectMode = isMultiSelectMode,
+                        onToggleSelectDay = toggleDateSelection,
+                        onSelectAllInMonth = selectAllDaysInMonth,
                         onSelectMonth = { m ->
                             selectedMonth = m
                             viewMode = PlanningViewMode.MOIS
                         }
                     )
+                }
+            }
+
+            // Floating Multi-Day Action Bar (Visible when days are selected)
+            if (selectedDates.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = HighDensitySurface,
+                    shadowElevation = 10.dp,
+                    tonalElevation = 6.dp,
+                    border = BorderStroke(1.5.dp, PrimaryBlue),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 60.dp, start = 8.dp, end = 8.dp)
+                        .fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f, fill = false)) {
+                            Text(
+                                "📅 ${selectedDates.size} j sélectionné${if (selectedDates.size > 1) "s" else ""}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = HighDensityHeaderTitle
+                            )
+                            Text(
+                                "Appliquer en masse :",
+                                fontSize = 10.sp,
+                                color = PrimaryBlue,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Journée Type Bulk Action
+                            Button(
+                                onClick = {
+                                    val sortedDates = selectedDates.toList().sorted()
+                                    onOpenMultiDayStandardDay?.invoke(sortedDates)
+                                        ?: onOpenStandardDayForDate?.invoke(sortedDates.first())
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+                                modifier = Modifier.height(34.dp)
+                            ) {
+                                Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Journée Type", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Single Slot Bulk Action
+                            Button(
+                                onClick = {
+                                    val sortedDates = selectedDates.toList().sorted()
+                                    onOpenMultiDayAddSlot?.invoke(sortedDates)
+                                        ?: onOpenAddSlotForDate(sortedDates.first())
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+                                modifier = Modifier.height(34.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Créneau", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Clear Selection Button
+                            IconButton(
+                                onClick = {
+                                    selectedDates = emptySet()
+                                    isMultiSelectMode = false
+                                },
+                                modifier = Modifier.size(30.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Désélectionner", tint = SecondaryText)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -888,6 +1100,13 @@ fun MonthView(
     year: Int,
     month: Int,
     slotsByDate: Map<String, List<SlotWithBookings>>,
+    selectedDates: Set<String> = emptySet(),
+    isMultiSelectMode: Boolean = false,
+    onToggleSelectDay: ((String) -> Unit)? = null,
+    onSelectAllInMonth: (() -> Unit)? = null,
+    onSelectWeekendsInMonth: (() -> Unit)? = null,
+    onSelectWeekdaysInMonth: (() -> Unit)? = null,
+    onClearSelection: (() -> Unit)? = null,
     onSelectDay: (String) -> Unit,
     onOpenAddSlotForDate: (String) -> Unit
 ) {
@@ -908,8 +1127,67 @@ fun MonthView(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 60.dp)
+            .padding(bottom = if (selectedDates.isNotEmpty()) 120.dp else 60.dp)
     ) {
+        // Multi-Select Quick Action Shortcuts
+        if (isMultiSelectMode) {
+            Surface(
+                color = HighDensityNavBar,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.4f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Sélection rapide :", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = PrimaryBlueContainer,
+                        modifier = Modifier.clickable { onSelectAllInMonth?.invoke() }
+                    ) {
+                        Text("📅 Tout le mois", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = PrimaryBlue, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = HighDensitySurface,
+                        border = BorderStroke(0.5.dp, BorderOutline),
+                        modifier = Modifier.clickable { onSelectWeekendsInMonth?.invoke() }
+                    ) {
+                        Text("🏖️ Week-ends", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = HighDensityHeaderTitle, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = HighDensitySurface,
+                        border = BorderStroke(0.5.dp, BorderOutline),
+                        modifier = Modifier.clickable { onSelectWeekdaysInMonth?.invoke() }
+                    ) {
+                        Text("🛫 Semaine (L-V)", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = HighDensityHeaderTitle, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                    }
+
+                    if (selectedDates.isNotEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = RedAlertBg,
+                            modifier = Modifier.clickable { onClearSelection?.invoke() }
+                        ) {
+                            Text("✕ Vider (${selectedDates.size})", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = RedAlertText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                        }
+                    }
+                }
+            }
+        }
+
         // Week days header
         Row(
             modifier = Modifier
@@ -946,6 +1224,7 @@ fun MonthView(
                         val dateIso = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayNum)
                         val daySlots = slotsByDate[dateIso].orEmpty()
                         val isToday = dateIso == todayIso
+                        val isSelected = selectedDates.contains(dateIso)
                         val status = getDayStatus(daySlots)
 
                         MonthDayCell(
@@ -954,6 +1233,7 @@ fun MonthView(
                             slots = daySlots,
                             status = status,
                             isToday = isToday,
+                            isSelected = isSelected,
                             modifier = Modifier.weight(1f),
                             onClick = { onSelectDay(dateIso) },
                             onAddSlot = { onOpenAddSlotForDate(dateIso) }
@@ -974,27 +1254,33 @@ fun MonthDayCell(
     slots: List<SlotWithBookings>,
     status: DayColorStatus,
     isToday: Boolean,
+    isSelected: Boolean = false,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onAddSlot: () -> Unit
 ) {
-    val bgColor = when (status) {
-        DayColorStatus.WHITE_NO_SLOT -> Color.White
-        DayColorStatus.GREEN_AVAILABLE -> Color(0xFFDCFCE7)
-        DayColorStatus.RED_FULL -> Color(0xFFFFDAD6)
+    val bgColor = when {
+        isSelected -> PrimaryBlueContainer.copy(alpha = 0.55f)
+        status == DayColorStatus.WHITE_NO_SLOT -> Color.White
+        status == DayColorStatus.GREEN_AVAILABLE -> Color(0xFFDCFCE7)
+        status == DayColorStatus.RED_FULL -> Color(0xFFFFDAD6)
+        else -> Color.White
     }
 
-    val borderColor = when (status) {
-        DayColorStatus.WHITE_NO_SLOT -> if (isToday) PrimaryBlue else BorderOutline.copy(alpha = 0.6f)
-        DayColorStatus.GREEN_AVAILABLE -> GreenSuccess
-        DayColorStatus.RED_FULL -> RedAlertText
+    val borderColor = when {
+        isSelected -> PrimaryBlue
+        isToday -> PrimaryBlue
+        status == DayColorStatus.WHITE_NO_SLOT -> BorderOutline.copy(alpha = 0.6f)
+        status == DayColorStatus.GREEN_AVAILABLE -> GreenSuccess
+        status == DayColorStatus.RED_FULL -> RedAlertText
+        else -> BorderOutline
     }
 
     Card(
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = bgColor),
-        border = BorderStroke(if (isToday) 2.dp else 1.dp, borderColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        border = BorderStroke(if (isSelected || isToday) 2.dp else 1.dp, borderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 3.dp else 1.dp),
         modifier = modifier
             .height(64.dp)
             .clickable { onClick() }
@@ -1014,18 +1300,26 @@ fun MonthDayCell(
                 Text(
                     text = "$dayNumber",
                     fontSize = 12.sp,
-                    fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
-                    color = if (isToday) PrimaryBlue else HighDensityHeaderTitle
+                    fontWeight = if (isToday || isSelected) FontWeight.ExtraBold else FontWeight.Bold,
+                    color = if (isSelected) PrimaryBlue else if (isToday) PrimaryBlue else HighDensityHeaderTitle
                 )
 
-                when (status) {
-                    DayColorStatus.GREEN_AVAILABLE -> {
-                        Surface(shape = CircleShape, color = GreenSuccess, modifier = Modifier.size(7.dp)) {}
+                if (isSelected) {
+                    Surface(shape = CircleShape, color = PrimaryBlue, modifier = Modifier.size(12.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("✓", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
-                    DayColorStatus.RED_FULL -> {
-                        Surface(shape = CircleShape, color = RedAlertText, modifier = Modifier.size(7.dp)) {}
+                } else {
+                    when (status) {
+                        DayColorStatus.GREEN_AVAILABLE -> {
+                            Surface(shape = CircleShape, color = GreenSuccess, modifier = Modifier.size(7.dp)) {}
+                        }
+                        DayColorStatus.RED_FULL -> {
+                            Surface(shape = CircleShape, color = RedAlertText, modifier = Modifier.size(7.dp)) {}
+                        }
+                        DayColorStatus.WHITE_NO_SLOT -> {}
                     }
-                    DayColorStatus.WHITE_NO_SLOT -> {}
                 }
             }
 
@@ -1075,6 +1369,10 @@ fun QuarterView(
     year: Int,
     quarter: Int,
     slotsByDate: Map<String, List<SlotWithBookings>>,
+    selectedDates: Set<String> = emptySet(),
+    isMultiSelectMode: Boolean = false,
+    onToggleSelectDay: ((String) -> Unit)? = null,
+    onSelectAllInMonth: ((Int, Int) -> Unit)? = null,
     onSelectMonth: (Int) -> Unit,
     onSelectDay: (String) -> Unit
 ) {
@@ -1089,7 +1387,7 @@ fun QuarterView(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 60.dp),
+            .padding(bottom = if (selectedDates.isNotEmpty()) 120.dp else 60.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         months.forEach { monthIndex ->
@@ -1097,6 +1395,9 @@ fun QuarterView(
                 year = year,
                 month = monthIndex,
                 slotsByDate = slotsByDate,
+                selectedDates = selectedDates,
+                isMultiSelectMode = isMultiSelectMode,
+                onToggleSelectMonth = { onSelectAllInMonth?.invoke(year, monthIndex) },
                 onMonthClick = { onSelectMonth(monthIndex) },
                 onDayClick = onSelectDay
             )
@@ -1108,6 +1409,10 @@ fun QuarterView(
 fun AnnualView(
     year: Int,
     slotsByDate: Map<String, List<SlotWithBookings>>,
+    selectedDates: Set<String> = emptySet(),
+    isMultiSelectMode: Boolean = false,
+    onToggleSelectDay: ((String) -> Unit)? = null,
+    onSelectAllInMonth: ((Int, Int) -> Unit)? = null,
     onSelectMonth: (Int) -> Unit
 ) {
     LazyVerticalGrid(
@@ -1115,13 +1420,16 @@ fun AnnualView(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 60.dp)
+        contentPadding = PaddingValues(bottom = if (selectedDates.isNotEmpty()) 120.dp else 60.dp)
     ) {
         items(12) { monthIndex ->
             MiniMonthCard(
                 year = year,
                 month = monthIndex,
                 slotsByDate = slotsByDate,
+                selectedDates = selectedDates,
+                isMultiSelectMode = isMultiSelectMode,
+                onToggleSelectMonth = { onSelectAllInMonth?.invoke(year, monthIndex) },
                 onMonthClick = { onSelectMonth(monthIndex) },
                 onDayClick = { onSelectMonth(monthIndex) }
             )
@@ -1134,6 +1442,9 @@ fun MiniMonthCard(
     year: Int,
     month: Int,
     slotsByDate: Map<String, List<SlotWithBookings>>,
+    selectedDates: Set<String> = emptySet(),
+    isMultiSelectMode: Boolean = false,
+    onToggleSelectMonth: (() -> Unit)? = null,
     onMonthClick: () -> Unit,
     onDayClick: (String) -> Unit
 ) {
@@ -1181,6 +1492,16 @@ fun MiniMonthCard(
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (isMultiSelectMode) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = PrimaryBlueContainer,
+                            modifier = Modifier.clickable { onToggleSelectMonth?.invoke() }
+                        ) {
+                            Text("+ Tout", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                        }
+                    }
+
                     if (greenDays > 0) {
                         Surface(shape = RoundedCornerShape(4.dp), color = GreenSuccessBg) {
                             Text("$greenDays dispo", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = GreenSuccess, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
@@ -1226,16 +1547,19 @@ fun MiniMonthCard(
                         if (dayNum in 1..daysInMonth) {
                             val dateIso = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayNum)
                             val daySlots = slotsByDate[dateIso].orEmpty()
+                            val isSelected = selectedDates.contains(dateIso)
                             val status = getDayStatus(daySlots)
 
-                            val cellColor = when (status) {
-                                DayColorStatus.GREEN_AVAILABLE -> GreenSuccess
-                                DayColorStatus.RED_FULL -> RedAlertText
-                                DayColorStatus.WHITE_NO_SLOT -> Color.White
+                            val cellColor = when {
+                                isSelected -> PrimaryBlue
+                                status == DayColorStatus.GREEN_AVAILABLE -> GreenSuccess
+                                status == DayColorStatus.RED_FULL -> RedAlertText
+                                else -> Color.White
                             }
 
-                            val cellBorder = when (status) {
-                                DayColorStatus.WHITE_NO_SLOT -> BorderStroke(0.5.dp, BorderOutline.copy(alpha = 0.4f))
+                            val cellBorder = when {
+                                isSelected -> BorderStroke(1.dp, PrimaryBlue)
+                                status == DayColorStatus.WHITE_NO_SLOT -> BorderStroke(0.5.dp, BorderOutline.copy(alpha = 0.4f))
                                 else -> null
                             }
 
@@ -1250,10 +1574,10 @@ fun MiniMonthCard(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Text(
-                                        text = "$dayNum",
-                                        fontSize = 7.5.sp,
+                                        text = if (isSelected) "✓" else "$dayNum",
+                                        fontSize = if (isSelected) 8.sp else 7.5.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (status == DayColorStatus.WHITE_NO_SLOT) HighDensityHeaderTitle else Color.White
+                                        color = if (isSelected) Color.White else if (status == DayColorStatus.WHITE_NO_SLOT) HighDensityHeaderTitle else Color.White
                                     )
                                 }
                             }
