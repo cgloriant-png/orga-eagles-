@@ -1,6 +1,6 @@
 {
-  "name": "Planning Paramoteur",
-  "description": "Gestion des créneaux de vol, inscriptions et planning des élèves pour instructeur paramoteur.",
+  "name": "Eagles Cool",
+  "description": "Application Eagles Cool pour la gestion des vols, du planning et des élèves paramoteur.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

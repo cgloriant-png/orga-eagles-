@@ -179,11 +179,11 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     fun generateSchoolShareText(): String {
         val code = schoolCode.value
         return """
-            🪂 *PLANNING PARAMOTEUR - CODE SYNCHRO ÉCOLE* 🪂
+            🦅 *EAGLES COOL - PLANNING & VOLS* 🪂
             Pour synchroniser votre planning et réserver vos séances de gonflage et de vol en direct :
             
-            1. Ouvrez l'application *Planning Paramoteur*
-            2. Cliquez sur l'indicateur de synchronisation en haut (ou paramètres)
+            1. Ouvrez l'application *Eagles Cool*
+            2. Touchez l'indicateur de synchronisation en haut (ou paramètres)
             3. Entrez le Code École : *${code}*
             
             Vos inscriptions et créneaux seront automatiquement synchronisés en direct avec l'école !
