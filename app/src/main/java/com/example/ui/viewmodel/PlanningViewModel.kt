@@ -64,7 +64,8 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
         val firstName: String = "",
         val lastName: String = "",
         val phone: String = "",
-        val level: String = "Gonflage"
+        val level: String = "Gonflage",
+        val studentDbId: Long = 0L
     ) {
         val isConfigured: Boolean get() = firstName.isNotBlank() && phone.isNotBlank()
         val fullName: String get() = "$firstName $lastName".trim()
@@ -75,7 +76,8 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
             firstName = prefs.getString("student_first_name", "") ?: "",
             lastName = prefs.getString("student_last_name", "") ?: "",
             phone = prefs.getString("student_phone", "") ?: "",
-            level = prefs.getString("student_level", "Gonflage") ?: "Gonflage"
+            level = prefs.getString("student_level", "Gonflage") ?: "Gonflage",
+            studentDbId = prefs.getLong("student_db_id", 0L)
         )
     )
     val savedProfile: StateFlow<StudentProfile> = _savedProfile.asStateFlow()
@@ -206,7 +208,8 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun saveStudentProfile(firstName: String, lastName: String, phone: String, level: String) {
-        val profile = StudentProfile(firstName.trim(), lastName.trim(), phone.trim(), level)
+        val currentDbId = _savedProfile.value.studentDbId
+        val profile = StudentProfile(firstName.trim(), lastName.trim(), phone.trim(), level, currentDbId)
         _savedProfile.value = profile
         prefs.edit()
             .putString("student_first_name", profile.firstName)
@@ -217,7 +220,9 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch {
             if (profile.firstName.isNotBlank() || profile.phone.isNotBlank()) {
-                repository.saveOrUpdateStudentProfile(profile.firstName, profile.lastName, profile.phone, profile.level)
+                val student = repository.saveOrUpdateStudentProfile(profile.firstName, profile.lastName, profile.phone, profile.level)
+                _savedProfile.value = profile.copy(studentDbId = student.id)
+                prefs.edit().putLong("student_db_id", student.id).apply()
                 _feedbackMessage.emit("Profil synchronisé avec l'école")
             }
         }
@@ -361,8 +366,16 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
         onComplete: ((student: StudentEntity, slot: LessonSlotEntity) -> Unit)? = null
     ) {
         viewModelScope.launch {
-            // Save profile locally for future 1-click use
-            saveStudentProfile(firstName, lastName, phone, level)
+            // Save profile in memory & prefs
+            val currentDbId = _savedProfile.value.studentDbId
+            val profile = StudentProfile(firstName.trim(), lastName.trim(), phone.trim(), level, currentDbId)
+            _savedProfile.value = profile
+            prefs.edit()
+                .putString("student_first_name", profile.firstName)
+                .putString("student_last_name", profile.lastName)
+                .putString("student_phone", profile.phone)
+                .putString("student_level", profile.level)
+                .apply()
 
             val (student, isSuccess) = repository.registerStudentSelf(
                 slotId = slotId,
@@ -372,6 +385,9 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
                 email = email,
                 level = level
             )
+
+            _savedProfile.value = profile.copy(studentDbId = student.id)
+            prefs.edit().putLong("student_db_id", student.id).apply()
 
             // Find slot details
             val slot = slotsWithBookings.value.find { it.slot.id == slotId }?.slot

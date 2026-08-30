@@ -47,6 +47,11 @@ private data class SyncPillStyle(
 )
 
 // Date formatting helper for French display
+private fun normalizePhoneNumber(phone: String): String {
+    return phone.replace("[^0-9+]".toRegex(), "")
+        .let { if (it.startsWith("+33")) "0" + it.substring(3) else it }
+}
+
 private fun formatDateFrench(dateIso: String): String {
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE)
@@ -118,13 +123,32 @@ fun StudentPortalScreen(
     cal.add(Calendar.DAY_OF_YEAR, 6)
     val endOfWeekIso = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(cal.time)
 
+    val normSavedPhone = normalizePhoneNumber(savedProfile.phone)
+    val cleanSavedFirst = savedProfile.firstName.trim()
+    val cleanSavedLast = savedProfile.lastName.trim()
+
     // Match current student entity
     val currentStudentEntity = allStudents.find {
-        it.phone.isNotBlank() && it.phone.replace(" ", "") == savedProfile.phone.replace(" ", "")
+        (savedProfile.studentDbId > 0 && it.id == savedProfile.studentDbId) ||
+        (normSavedPhone.isNotBlank() && normalizePhoneNumber(it.phone) == normSavedPhone)
     } ?: allStudents.find {
-        it.firstName.equals(savedProfile.firstName, ignoreCase = true) && it.lastName.equals(savedProfile.lastName, ignoreCase = true)
+        cleanSavedFirst.isNotBlank() && it.firstName.equals(cleanSavedFirst, ignoreCase = true) &&
+        (cleanSavedLast.isBlank() || it.lastName.equals(cleanSavedLast, ignoreCase = true))
     }
-    val currentStudentId = currentStudentEntity?.id
+    val currentStudentId = currentStudentEntity?.id ?: if (savedProfile.studentDbId > 0) savedProfile.studentDbId else null
+
+    fun isStudentMatchingEntity(student: StudentEntity): Boolean {
+        if (savedProfile.studentDbId > 0 && student.id == savedProfile.studentDbId) return true
+        if (currentStudentId != null && student.id == currentStudentId) return true
+        val normDbPhone = normalizePhoneNumber(student.phone)
+        if (normSavedPhone.isNotBlank() && normDbPhone.isNotBlank() && normDbPhone == normSavedPhone) return true
+        if (cleanSavedFirst.isNotBlank() && student.firstName.equals(cleanSavedFirst, ignoreCase = true)) {
+            if (cleanSavedLast.isBlank() || student.lastName.equals(cleanSavedLast, ignoreCase = true)) {
+                return true
+            }
+        }
+        return false
+    }
 
     // Precompute slots map
     val slotsByDate = remember(slots) {
@@ -134,16 +158,12 @@ fun StudentPortalScreen(
     // Helper to check if student is enrolled in a slot
     fun isStudentEnrolledInSlot(slotItem: SlotWithBookings): Boolean {
         if (currentStudentId != null && slotItem.enrolledStudentIds.contains(currentStudentId)) return true
-        val cleanSavedPhone = savedProfile.phone.replace(" ", "")
-        val cleanSavedFirst = savedProfile.firstName.trim()
-        val cleanSavedLast = savedProfile.lastName.trim()
+        if (savedProfile.studentDbId > 0 && slotItem.enrolledStudentIds.contains(savedProfile.studentDbId)) return true
 
         return slotItem.confirmedBookings.any { b ->
-            (cleanSavedPhone.isNotBlank() && b.student.phone.replace(" ", "") == cleanSavedPhone) ||
-            (cleanSavedFirst.isNotBlank() && b.student.firstName.equals(cleanSavedFirst, ignoreCase = true) && b.student.lastName.equals(cleanSavedLast, ignoreCase = true))
+            isStudentMatchingEntity(b.student)
         } || slotItem.waitingListBookings.any { b ->
-            (cleanSavedPhone.isNotBlank() && b.student.phone.replace(" ", "") == cleanSavedPhone) ||
-            (cleanSavedFirst.isNotBlank() && b.student.firstName.equals(cleanSavedFirst, ignoreCase = true) && b.student.lastName.equals(cleanSavedLast, ignoreCase = true))
+            isStudentMatchingEntity(b.student)
         }
     }
 
@@ -734,6 +754,7 @@ fun StudentPortalScreen(
                                         slotItem = slotItem,
                                         isAlreadyEnrolled = isEnrolled,
                                         currentStudentId = currentStudentId,
+                                        isStudentMatching = { isStudentMatchingEntity(it) },
                                         onUnenroll = { sId, stId -> onUnenroll(sId, stId) },
                                         onNotifyWhatsApp = { sendWhatsAppRegistrationConfirmation(slotItem) },
                                         onRegisterClick = {
@@ -1344,6 +1365,7 @@ fun StudentSlotCard(
     slotItem: SlotWithBookings,
     isAlreadyEnrolled: Boolean,
     currentStudentId: Long?,
+    isStudentMatching: (StudentEntity) -> Boolean = { false },
     onUnenroll: (slotId: Long, studentId: Long) -> Unit,
     onNotifyWhatsApp: (() -> Unit)? = null,
     onRegisterClick: () -> Unit
@@ -1354,8 +1376,8 @@ fun StudentSlotCard(
     val isFull = slotItem.isFull
     val timeRangeText = formatTimeRangeFrench(slot.startTime, slot.endTime)
 
-    val myBooking = slotItem.confirmedBookings.find { it.booking.studentId == currentStudentId }
-        ?: slotItem.waitingListBookings.find { it.booking.studentId == currentStudentId }
+    val myBooking = slotItem.confirmedBookings.find { (currentStudentId != null && it.booking.studentId == currentStudentId) || isStudentMatching(it.student) }
+        ?: slotItem.waitingListBookings.find { (currentStudentId != null && it.booking.studentId == currentStudentId) || isStudentMatching(it.student) }
     val isWaiting = myBooking?.booking?.isWaitingList ?: false
 
     Card(
@@ -1543,8 +1565,9 @@ fun StudentSlotCard(
 
                         TextButton(
                             onClick = {
-                                if (currentStudentId != null) {
-                                    onUnenroll(slot.id, currentStudentId)
+                                val sId = currentStudentId ?: myBooking?.booking?.studentId ?: myBooking?.student?.id
+                                if (sId != null) {
+                                    onUnenroll(slot.id, sId)
                                 }
                             },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
@@ -1618,6 +1641,30 @@ fun StudentDayDetailSheet(
 ) {
     val sunTimes = remember(dateIso) {
         com.example.util.SunCalculator.calculateSunTimes(dateIso)
+    }
+
+    val normSavedPhone = normalizePhoneNumber(savedProfile.phone)
+    val cleanSavedFirst = savedProfile.firstName.trim()
+    val cleanSavedLast = savedProfile.lastName.trim()
+
+    fun isStudentMatching(student: StudentEntity): Boolean {
+        if (savedProfile.studentDbId > 0 && student.id == savedProfile.studentDbId) return true
+        if (currentStudentId != null && student.id == currentStudentId) return true
+        val normDbPhone = normalizePhoneNumber(student.phone)
+        if (normSavedPhone.isNotBlank() && normDbPhone.isNotBlank() && normDbPhone == normSavedPhone) return true
+        if (cleanSavedFirst.isNotBlank() && student.firstName.equals(cleanSavedFirst, ignoreCase = true)) {
+            if (cleanSavedLast.isBlank() || student.lastName.equals(cleanSavedLast, ignoreCase = true)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    fun isEnrolledInSlot(slotItem: SlotWithBookings): Boolean {
+        if (currentStudentId != null && slotItem.enrolledStudentIds.contains(currentStudentId)) return true
+        if (savedProfile.studentDbId > 0 && slotItem.enrolledStudentIds.contains(savedProfile.studentDbId)) return true
+        return slotItem.confirmedBookings.any { isStudentMatching(it.student) } ||
+               slotItem.waitingListBookings.any { isStudentMatching(it.student) }
     }
 
     ModalBottomSheet(
@@ -1704,11 +1751,12 @@ fun StudentDayDetailSheet(
                 }
             } else {
                 slots.forEach { slotItem ->
-                    val isAlreadyEnrolled = currentStudentId != null && slotItem.enrolledStudentIds.contains(currentStudentId)
+                    val isAlreadyEnrolled = isEnrolledInSlot(slotItem)
                     StudentSlotCard(
                         slotItem = slotItem,
                         isAlreadyEnrolled = isAlreadyEnrolled,
                         currentStudentId = currentStudentId,
+                        isStudentMatching = { isStudentMatching(it) },
                         onUnenroll = onUnenroll,
                         onNotifyWhatsApp = { onNotifyWhatsApp?.invoke(slotItem) },
                         onRegisterClick = { onRegisterSlot(slotItem) }

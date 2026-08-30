@@ -185,22 +185,41 @@ class PlanningRepository(
         cloudSyncManager?.pushFullSync(immediate = true)
     }
 
-    suspend fun saveOrUpdateStudentProfile(
+    fun normalizePhoneNumber(phone: String): String {
+        return phone.replace("[^0-9+]".toRegex(), "")
+            .let { if (it.startsWith("+33")) "0" + it.substring(3) else it }
+    }
+
+    suspend fun getOrCreateStudentProfile(
         firstName: String,
         lastName: String,
         phone: String,
-        level: String
+        email: String = "",
+        level: String = "Gonflage"
     ): StudentEntity {
-        val cleanPhone = phone.trim()
         val cleanFirst = firstName.trim()
         val cleanLast = lastName.trim()
+        val cleanPhone = phone.trim()
+        val normPhone = normalizePhoneNumber(cleanPhone)
 
-        var student = if (cleanPhone.isNotBlank()) {
-            planningDao.findStudentByPhone(cleanPhone)
-        } else null
+        val allStudents = planningDao.getAllStudentsList()
+
+        var student = allStudents.find {
+            normPhone.isNotBlank() && normalizePhoneNumber(it.phone) == normPhone
+        }
 
         if (student == null && cleanFirst.isNotBlank() && cleanLast.isNotBlank()) {
-            student = planningDao.findStudentByName(cleanFirst, cleanLast)
+            student = allStudents.find {
+                it.firstName.equals(cleanFirst, ignoreCase = true) &&
+                it.lastName.equals(cleanLast, ignoreCase = true)
+            }
+        }
+
+        if (student == null && cleanFirst.isNotBlank() && normPhone.isNotBlank()) {
+            student = allStudents.find {
+                it.firstName.equals(cleanFirst, ignoreCase = true) &&
+                normalizePhoneNumber(it.phone) == normPhone
+            }
         }
 
         if (student == null) {
@@ -209,23 +228,36 @@ class PlanningRepository(
                 firstName = cleanFirst.ifBlank { "Élève" },
                 lastName = cleanLast,
                 phone = cleanPhone,
-                email = "",
+                email = email.trim(),
                 level = level.ifBlank { "Gonflage" },
                 notes = "Inscrit via Espace Élève"
             )
             planningDao.insertStudent(newStudent)
-            student = newStudent
+            cloudSyncManager?.pushStudent(newStudent)
+            return newStudent
         } else {
             val updated = student.copy(
                 firstName = cleanFirst.ifBlank { student.firstName },
                 lastName = cleanLast.ifBlank { student.lastName },
                 phone = cleanPhone.ifBlank { student.phone },
+                email = email.trim().ifBlank { student.email },
                 level = level.ifBlank { student.level }
             )
-            planningDao.updateStudent(updated)
-            student = updated
+            if (updated != student) {
+                planningDao.updateStudent(updated)
+                cloudSyncManager?.pushStudent(updated)
+            }
+            return updated
         }
+    }
 
+    suspend fun saveOrUpdateStudentProfile(
+        firstName: String,
+        lastName: String,
+        phone: String,
+        level: String
+    ): StudentEntity {
+        val student = getOrCreateStudentProfile(firstName, lastName, phone, "", level)
         cloudSyncManager?.pushFullSync(immediate = true)
         return student
     }
@@ -322,42 +354,9 @@ class PlanningRepository(
         email: String = "",
         level: String = "Gonflage"
     ): Pair<StudentEntity, Boolean> {
-        val cleanPhone = phone.trim()
-        val cleanFirst = firstName.trim()
-        val cleanLast = lastName.trim()
+        val student = getOrCreateStudentProfile(firstName, lastName, phone, email, level)
 
-        // 1. Look up student by phone or name
-        var student = if (cleanPhone.isNotBlank()) {
-            planningDao.findStudentByPhone(cleanPhone)
-        } else null
-
-        if (student == null && cleanFirst.isNotBlank() && cleanLast.isNotBlank()) {
-            student = planningDao.findStudentByName(cleanFirst, cleanLast)
-        }
-
-        // 2. If not found, create new student in database
-        if (student == null) {
-            val newStudent = StudentEntity(
-                id = generateUniqueId(),
-                firstName = cleanFirst.ifBlank { "Élève" },
-                lastName = cleanLast,
-                phone = cleanPhone,
-                email = email.trim(),
-                level = level,
-                notes = "Inscrit via Version Élève"
-            )
-            planningDao.insertStudent(newStudent)
-            student = newStudent
-        } else {
-            // Update level/phone if needed
-            if (student.level != level || (cleanPhone.isNotBlank() && student.phone != cleanPhone)) {
-                val updated = student.copy(level = level, phone = cleanPhone.ifBlank { student.phone })
-                planningDao.updateStudent(updated)
-                student = updated
-            }
-        }
-
-        // 3. Enroll into slot
+        // Enroll into slot
         val slot = planningDao.getSlotById(slotId)
         val bookings = planningDao.getBookingsForSlotSync(slotId)
         val isSlotFull = bookings.filter { !it.isWaitingList }.size >= (slot?.maxCapacity ?: 4)

@@ -336,6 +336,7 @@ class CloudSyncManager(
         val localSlots = dao.getAllSlotsList()
         val localStudents = dao.getAllStudentsList()
         val localBookings = dao.getAllBookingsList()
+        val localProgress = dao.getAllStudentProgressList()
 
         if (remoteJson == null) {
             // No remote state found; local data is the initial state
@@ -370,15 +371,26 @@ class CloudSyncManager(
         val allDeletedBookings = remoteDeletedBookingIds + getDeletedIds("booking")
         val allDeletedStudents = remoteDeletedStudentIds + getDeletedIds("student")
 
-        // 1. Apply deletions to local Room
+        val localSlotsMap = localSlots.associateBy { it.id }
+        val localStudentsMap = localStudents.associateBy { it.id }
+        val localBookingsMap = localBookings.associateBy { it.id }
+        val localProgressMap = localProgress.associateBy { it.studentId }
+
+        // 1. Apply deletions to local Room only if item exists locally
         for (delId in allDeletedSlots) {
-            dao.deleteSlotById(delId)
+            if (localSlotsMap.containsKey(delId)) {
+                dao.deleteSlotById(delId)
+            }
         }
         for (delId in allDeletedBookings) {
-            dao.deleteBookingById(delId)
+            if (localBookingsMap.containsKey(delId)) {
+                dao.deleteBookingById(delId)
+            }
         }
         for (delId in allDeletedStudents) {
-            dao.deleteStudentById(delId)
+            if (localStudentsMap.containsKey(delId)) {
+                dao.deleteStudentById(delId)
+            }
         }
 
         // 2. Parse and upsert remote slots
@@ -490,10 +502,16 @@ class CloudSyncManager(
             }
         }
 
-        if (remoteSlots.isNotEmpty()) dao.insertSlots(remoteSlots)
-        if (remoteStudents.isNotEmpty()) dao.insertStudents(remoteStudents)
-        if (remoteBookings.isNotEmpty()) dao.insertBookings(remoteBookings)
-        if (remoteProgressList.isNotEmpty()) dao.insertAllProgress(remoteProgressList)
+        // Only insert/update items that have changed compared to local DB
+        val slotsToInsert = remoteSlots.filter { localSlotsMap[it.id] != it }
+        val studentsToInsert = remoteStudents.filter { localStudentsMap[it.id] != it }
+        val bookingsToInsert = remoteBookings.filter { localBookingsMap[it.id] != it }
+        val progressToInsert = remoteProgressList.filter { localProgressMap[it.studentId] != it }
+
+        if (slotsToInsert.isNotEmpty()) dao.insertSlots(slotsToInsert)
+        if (studentsToInsert.isNotEmpty()) dao.insertStudents(studentsToInsert)
+        if (bookingsToInsert.isNotEmpty()) dao.insertBookings(bookingsToInsert)
+        if (progressToInsert.isNotEmpty()) dao.insertAllProgress(progressToInsert)
 
         // Check if local database has items that were not yet in the remote snapshot
         val localUnsyncedSlots = localSlots.filter { it.id !in remoteSlotIds && it.id !in allDeletedSlots }
