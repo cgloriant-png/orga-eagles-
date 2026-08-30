@@ -811,6 +811,15 @@ class MainActivity : ComponentActivity() {
                     onForceSync = { viewModel.forceSync() },
                     onShareSchoolCode = { openWhatsAppDirect(viewModel.generateSchoolShareText()) }
                 )
+
+                // Dialog: PIN Code Security Settings
+                PinSettingsDialog(
+                    isOpen = showPinSettingsDialog,
+                    onDismiss = { showPinSettingsDialog = false },
+                    currentPin = instructorPin,
+                    onSavePin = { viewModel.setInstructorPin(it) },
+                    onResetPin = { viewModel.resetInstructorPin() }
+                )
             }
         }
     }

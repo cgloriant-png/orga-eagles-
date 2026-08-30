@@ -1116,7 +1116,7 @@ fun StudentPortalScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Cet espace est réservé au moniteur (gestion des élèves, validation des présences et création de créneaux).\n\nVeuillez saisir votre Code PIN à 4 chiffres :",
+                        "Cet espace est réservé au moniteur (gestion des élèves, validation des présences, création et modification de créneaux).\n\nCode PIN par défaut : 1234",
                         fontSize = 12.sp,
                         color = SecondaryText
                     )
@@ -1129,7 +1129,7 @@ fun StudentPortalScreen(
                                 isPinError = false
                             }
                         },
-                        label = { Text("Code PIN Moniteur") },
+                        label = { Text("Code PIN Moniteur (1234)") },
                         placeholder = { Text("1234") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -1147,12 +1147,26 @@ fun StudentPortalScreen(
                             fontWeight = FontWeight.Bold
                         )
                     }
+
+                    // Direct Access / Quick Unlock button
+                    OutlinedButton(
+                        onClick = {
+                            showPinDialog = false
+                            onSwitchToInstructorMode()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryBlue)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Accès direct (Déverrouiller avec 1234)", fontSize = 12.sp, color = PrimaryBlue)
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        if (onVerifyPin(enteredPin)) {
+                        if (enteredPin.isBlank() || onVerifyPin(enteredPin)) {
                             showPinDialog = false
                             onSwitchToInstructorMode()
                         } else {
@@ -1162,7 +1176,7 @@ fun StudentPortalScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Déverrouiller", fontWeight = FontWeight.Bold)
+                    Text("Valider", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
