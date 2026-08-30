@@ -58,13 +58,29 @@ fun LicenseAdminDialog(
 
     fun shareKey(key: String, pilotName: String, durationLabel: String) {
         val pilotInfo = if (pilotName.isNotBlank()) " pour $pilotName" else ""
-        val text = "Bonjour$pilotInfo,\nVoici votre clé d'activation pour l'application Eagles Academy ($durationLabel) :\n\n$key\n\nBons vols !"
-        val sendIntent = Intent().apply {
+        val text = "Bonjour$pilotInfo,\nVoici votre clé d'activation pour l'application Eagles Academy ($durationLabel) :\n\n👉 $key\n\nCopiez cette clé et collez-la dans l'application pour déverrouiller votre accès. Bons vols !"
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, text)
             type = "text/plain"
+            `package` = "com.whatsapp"
         }
-        context.startActivity(Intent.createChooser(sendIntent, "Envoyer la clé au pilote"))
+        try {
+            context.startActivity(sendIntent)
+        } catch (e: Exception) {
+            val chooser = Intent.createChooser(
+                Intent(Intent.ACTION_SEND).apply {
+                    putExtra(Intent.EXTRA_TEXT, text)
+                    type = "text/plain"
+                },
+                "Envoyer la clé au pilote"
+            )
+            try {
+                context.startActivity(chooser)
+            } catch (ex: Exception) {
+                Toast.makeText(context, "Impossible d'ouvrir le partage", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     AlertDialog(

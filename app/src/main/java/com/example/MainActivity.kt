@@ -33,6 +33,7 @@ import com.example.data.model.*
 import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.PlanningViewModel
+import com.example.util.LicenseManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -52,6 +53,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             ParamoteurTheme {
                 val context = LocalContext.current
+
+                // License Activation Check State
+                var licenseStatus by remember { mutableStateOf(LicenseManager.checkStatus(context)) }
 
                 // State from ViewModel
                 val allStudents by viewModel.allStudents.collectAsStateWithLifecycle()
@@ -134,8 +138,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // If in Student Mode (Version Élève)
-                if (isStudentMode) {
+                // Top Level Gating: If the app is not activated on this device, show ActivationScreen!
+                if (!licenseStatus.isActivated) {
+                    ActivationScreen(
+                        onActivated = {
+                            licenseStatus = LicenseManager.checkStatus(context)
+                        }
+                    )
+                } else if (isStudentMode) {
                     StudentPortalScreen(
                         slots = slotsWithBookings,
                         savedProfile = savedProfile,
@@ -191,15 +201,17 @@ class MainActivity : ComponentActivity() {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
+                                    // Title & school code & status pill
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.weight(1f, fill = false)
                                     ) {
-                                        Text("🪂", fontSize = 20.sp)
+                                        Text("🪂", fontSize = 18.sp)
                                         Column {
                                             val statusDotColor = when (syncStatus) {
                                                 com.example.data.cloud.SyncStatus.CONNECTED_SYNCED -> Color(0xFF34D399)
@@ -228,95 +240,138 @@ class MainActivity : ComponentActivity() {
 
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Text(
-                                                    "Planning & Élèves",
+                                                    "Planning ULM",
                                                     fontWeight = FontWeight.Bold,
-                                                    fontSize = 15.sp,
+                                                    fontSize = 13.sp,
                                                     color = Color.White
                                                 )
                                                 // Sync Live Indicator
                                                 Surface(
-                                                    shape = RoundedCornerShape(10.dp),
+                                                    shape = RoundedCornerShape(8.dp),
                                                     color = statusBgColor,
                                                     border = BorderStroke(1.dp, statusBorderColor),
                                                     modifier = Modifier.clickable { showSyncSettingsDialog = true }
                                                 ) {
                                                     Row(
-                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
                                                         Box(
                                                             modifier = Modifier
-                                                                .size(6.dp)
+                                                                .size(5.dp)
                                                                 .background(statusDotColor, CircleShape)
                                                         )
                                                         Spacer(modifier = Modifier.width(3.dp))
-                                                        Text(statusText, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                        Text(statusText, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                                     }
                                                 }
                                             }
                                             Text(
-                                                "École: $schoolCode • Gonflage & Vol",
-                                                fontSize = 11.sp,
+                                                "École: $schoolCode",
+                                                fontSize = 10.sp,
                                                 color = Color.White.copy(alpha = 0.85f)
                                             )
                                         }
                                     }
 
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        // Sync settings dialog button
+                                    // Action buttons for instructor (Optimized for portrait screens)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        // Key / License Admin button
                                         IconButton(
-                                            onClick = { showSyncSettingsDialog = true },
-                                            modifier = Modifier.size(34.dp)
+                                            onClick = { showLicenseAdminDialog = true },
+                                            modifier = Modifier.size(32.dp)
                                         ) {
-                                            Icon(Icons.Default.CloudSync, contentDescription = "Paramètres de synchronisation", tint = Color.White)
-                                        }
-
-                                        // Refresh / Force Sync button
-                                        IconButton(
-                                            onClick = { viewModel.forceSync() },
-                                            modifier = Modifier.size(34.dp)
-                                        ) {
-                                            Icon(Icons.Default.Refresh, contentDescription = "Actualiser Cloud", tint = Color.White)
+                                            Icon(Icons.Default.Key, contentDescription = "Gestion des Licences", tint = Color(0xFFFFD54F), modifier = Modifier.size(18.dp))
                                         }
 
                                         // Security / PIN Settings button
                                         IconButton(
                                             onClick = { showPinSettingsDialog = true },
-                                            modifier = Modifier.size(34.dp)
+                                            modifier = Modifier.size(32.dp)
                                         ) {
-                                            Icon(Icons.Default.Security, contentDescription = "Sécurité & PIN", tint = Color.White)
-                                        }
-
-                                        // License Admin / Key Generator button
-                                        IconButton(
-                                            onClick = { showLicenseAdminDialog = true },
-                                            modifier = Modifier.size(34.dp)
-                                        ) {
-                                            Icon(Icons.Default.Key, contentDescription = "Gestion des Licences", tint = Color(0xFFFFD54F))
+                                            Icon(Icons.Default.Security, contentDescription = "Sécurité & PIN", tint = Color.White, modifier = Modifier.size(18.dp))
                                         }
 
                                         // Switch to Student Mode button (Lock for students)
                                         OutlinedButton(
                                             onClick = { viewModel.setAppMode(true) },
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                            shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                            modifier = Modifier.height(34.dp)
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
                                         ) {
-                                            Text("👁️ Version Élève", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text("👁️ Élève", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                                         }
 
                                         // WhatsApp share planning button
                                         Button(
                                             onClick = { openWhatsAppDirect(viewModel.getWhatsAppText()) },
                                             colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess),
-                                            shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                            modifier = Modifier.height(34.dp)
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
                                         ) {
-                                            Text("💬", fontSize = 13.sp)
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("WhatsApp", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text("💬", fontSize = 11.sp)
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text("WA", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        // Overflow options menu
+                                        var showTopOverflow by remember { mutableStateOf(false) }
+                                        Box {
+                                            IconButton(
+                                                onClick = { showTopOverflow = true },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(Icons.Default.MoreVert, contentDescription = "Options supplémentaires", tint = Color.White, modifier = Modifier.size(18.dp))
+                                            }
+
+                                            DropdownMenu(
+                                                expanded = showTopOverflow,
+                                                onDismissRequest = { showTopOverflow = false }
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Paramètres Cloud & Sync") },
+                                                    onClick = {
+                                                        showTopOverflow = false
+                                                        showSyncSettingsDialog = true
+                                                    },
+                                                    leadingIcon = { Icon(Icons.Default.CloudSync, contentDescription = null) }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Forcer la synchronisation") },
+                                                    onClick = {
+                                                        showTopOverflow = false
+                                                        viewModel.forceSync()
+                                                    },
+                                                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Changer le code PIN") },
+                                                    onClick = {
+                                                        showTopOverflow = false
+                                                        showPinSettingsDialog = true
+                                                    },
+                                                    leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Gestion Licences & Clés") },
+                                                    onClick = {
+                                                        showTopOverflow = false
+                                                        showLicenseAdminDialog = true
+                                                    },
+                                                    leadingIcon = { Icon(Icons.Default.Key, contentDescription = null, tint = Color(0xFFD97706)) }
+                                                )
+                                                Divider()
+                                                DropdownMenuItem(
+                                                    text = { Text("Partager Code École (WhatsApp)") },
+                                                    onClick = {
+                                                        showTopOverflow = false
+                                                        openWhatsAppDirect(viewModel.generateSchoolShareText())
+                                                    },
+                                                    leadingIcon = { Text("💬", fontSize = 14.sp) }
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -884,8 +939,13 @@ class MainActivity : ComponentActivity() {
                 // Dialog: License Admin & Key Generation
                 if (showLicenseAdminDialog) {
                     LicenseAdminDialog(
-                        onDismiss = { showLicenseAdminDialog = false },
-                        onStatusChanged = { /* License status updated */ }
+                        onDismiss = {
+                            showLicenseAdminDialog = false
+                            licenseStatus = LicenseManager.checkStatus(context)
+                        },
+                        onStatusChanged = {
+                            licenseStatus = LicenseManager.checkStatus(context)
+                        }
                     )
                 }
             }

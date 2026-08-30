@@ -224,15 +224,16 @@ fun StudentPortalScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f, fill = false)
                         ) {
-                            Text("🪂", fontSize = 20.sp)
+                            Text("🪂", fontSize = 18.sp)
                             Column {
                                 val pillStyle = when (syncStatus) {
                                     SyncStatus.CONNECTED_SYNCED -> SyncPillStyle(Color(0xFF34D399), Color(0xFF10B981).copy(alpha = 0.25f), Color(0xFF10B981), if (lastSyncTime.isNotBlank()) "En direct $lastSyncTime" else "En direct")
@@ -242,51 +243,51 @@ fun StudentPortalScreen(
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("Espace Élèves", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                                    Text("Espace Élèves", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
                                     Surface(
-                                        shape = RoundedCornerShape(10.dp),
+                                        shape = RoundedCornerShape(8.dp),
                                         color = pillStyle.bgColor,
                                         border = BorderStroke(1.dp, pillStyle.borderColor),
                                         modifier = Modifier.clickable { showSyncSettingsDialog = true }
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(6.dp)
+                                                    .size(5.dp)
                                                     .background(pillStyle.dotColor, CircleShape)
                                             )
                                             Spacer(modifier = Modifier.width(3.dp))
-                                            Text(pillStyle.text, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            Text(pillStyle.text, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                         }
                                     }
                                 }
-                                Text("École: $schoolCode • Inscriptions en direct", fontSize = 11.sp, color = Color.White.copy(alpha = 0.85f))
+                                Text("École: $schoolCode • Inscriptions directes", fontSize = 10.sp, color = Color.White.copy(alpha = 0.85f))
                             }
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                             // Sync settings button
                             IconButton(
                                 onClick = { showSyncSettingsDialog = true },
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(30.dp)
                             ) {
-                                Icon(Icons.Default.CloudSync, contentDescription = "Paramètres de synchronisation", tint = Color.White)
+                                Icon(Icons.Default.CloudSync, contentDescription = "Paramètres de synchronisation", tint = Color.White, modifier = Modifier.size(18.dp))
                             }
 
                             // Moniteur Access button with PIN Lock
                             OutlinedButton(
                                 onClick = { showPinDialog = true },
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(32.dp)
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp)
                             ) {
-                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Accès Moniteur", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Moniteur", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

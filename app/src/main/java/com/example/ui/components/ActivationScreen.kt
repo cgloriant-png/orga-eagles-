@@ -22,7 +22,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -60,6 +59,32 @@ fun ActivationScreen(
         val clip = ClipData.newPlainText(label, text)
         clipboard.setPrimaryClip(clip)
         Toast.makeText(context, "$label copié dans le presse-papier !", Toast.LENGTH_SHORT).show()
+    }
+
+    fun sendViaWhatsApp() {
+        val message = "Bonjour !\nVoici mon Identifiant Appareil pour activer mon application Eagles Academy :\n\n👉 $deviceId\n\nMerci de m'envoyer ma clé d'activation !"
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_TEXT, message)
+            type = "text/plain"
+            `package` = "com.whatsapp"
+        }
+        try {
+            context.startActivity(sendIntent)
+        } catch (e: Exception) {
+            val chooser = Intent.createChooser(
+                Intent(Intent.ACTION_SEND).apply {
+                    putExtra(Intent.EXTRA_TEXT, message)
+                    type = "text/plain"
+                },
+                "Envoyer mon ID au moniteur"
+            )
+            try {
+                context.startActivity(chooser)
+            } catch (ex: Exception) {
+                Toast.makeText(context, "Impossible d'ouvrir le partage", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     fun shareDeviceId() {
@@ -100,12 +125,12 @@ fun ActivationScreen(
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Eagles Academy Logo
             Box(
                 modifier = Modifier
-                    .size(96.dp)
+                    .size(90.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color.White)
                     .padding(4.dp),
@@ -119,7 +144,7 @@ fun ActivationScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = "EAGLES ACADEMY",
@@ -130,15 +155,15 @@ fun ActivationScreen(
             )
 
             Text(
-                text = "Paramoteur & Compétition - Accès Pilote",
+                text = "Paramoteur & ULM - Activation Requise",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = SecondaryText
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Card with Device ID
+            // Step 1: Device ID & WhatsApp Send
             Card(
                 colors = CardDefaults.cardColors(containerColor = HighDensitySurface),
                 shape = RoundedCornerShape(16.dp),
@@ -146,14 +171,22 @@ fun ActivationScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
+                    modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = PrimaryBlueDark, modifier = Modifier.size(18.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = PrimaryBlueDark,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("1", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
                         Text(
                             text = "VOTRE IDENTIFIANT APPAREIL",
                             fontSize = 12.sp,
@@ -166,13 +199,13 @@ fun ActivationScreen(
 
                     Surface(
                         color = Color(0xFFF1F5F9),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.5.dp, Color(0xFFCBD5E1)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = deviceId,
-                            fontSize = 22.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Black,
                             fontFamily = FontFamily.Monospace,
                             color = Color(0xFF0F172A),
@@ -182,6 +215,24 @@ fun ActivationScreen(
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
+
+                    // Direct Green WhatsApp button
+                    Button(
+                        onClick = { sendViaWhatsApp() },
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                    ) {
+                        Text("💬", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Envoyer mon ID par WhatsApp au Moniteur",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -194,25 +245,24 @@ fun ActivationScreen(
                         ) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Copier", fontSize = 12.sp)
+                            Text("Copier l'ID", fontSize = 12.sp)
                         }
 
-                        Button(
+                        OutlinedButton(
                             onClick = { shareDeviceId() },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlueDark)
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Envoyer", fontSize = 12.sp)
+                            Text("Autre partage", fontSize = 12.sp)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Transmettez cet identifiant au concepteur de l'application pour recevoir votre clé d'activation.",
+                        text = "Le moniteur générera votre clé d'activation personnalisée dès réception de cet identifiant.",
                         fontSize = 11.sp,
                         color = SecondaryText,
                         textAlign = TextAlign.Center
@@ -220,9 +270,9 @@ fun ActivationScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // Activation Key Form
+            // Step 2: Activation Key Form
             Card(
                 colors = CardDefaults.cardColors(containerColor = HighDensitySurface),
                 shape = RoundedCornerShape(16.dp),
@@ -230,21 +280,35 @@ fun ActivationScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp)
+                    modifier = Modifier.padding(16.dp)
                 ) {
-                    Text(
-                        text = "SAISIE DU CODE D'ACTIVATION",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = HighDensityHeaderTitle
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = PrimaryBlueDark,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("2", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                        Text(
+                            text = "SAISIE DE LA CLÉ D'ACTIVATION REÇUE",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = HighDensityHeaderTitle
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
                     OutlinedTextField(
                         value = pilotName,
                         onValueChange = { pilotName = it },
-                        label = { Text("Nom du Pilote (facultatif)") },
+                        label = { Text("Votre Nom / Prénom (facultatif)") },
                         placeholder = { Text("Ex: Thomas V.") },
                         leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = PrimaryBlueDark) },
                         singleLine = true,
@@ -252,7 +316,7 @@ fun ActivationScreen(
                         shape = RoundedCornerShape(10.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     OutlinedTextField(
                         value = enteredCode,
@@ -318,7 +382,7 @@ fun ActivationScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Button(
                         onClick = { tryActivation() },
@@ -326,16 +390,16 @@ fun ActivationScreen(
                             .fillMaxWidth()
                             .height(48.dp),
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlueDark)
                     ) {
                         Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Activer l'application", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Activer mon application", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Developer / Creator Master Unlock Button
             TextButton(
@@ -344,7 +408,7 @@ fun ActivationScreen(
                 Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = SecondaryText, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Accès Concepteur / Développeur",
+                    text = "Accès Moniteur / Développeur",
                     color = SecondaryText,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
@@ -360,18 +424,18 @@ fun ActivationScreen(
                 masterPinInput = ""
             },
             icon = { Icon(Icons.Default.Security, contentDescription = null, tint = PrimaryBlueDark) },
-            title = { Text("Code Développeur Master", fontWeight = FontWeight.Bold) },
+            title = { Text("Code Moniteur / Développeur", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Saisissez votre code concepteur/développeur pour déverrouiller l'accès complet sans restriction de date :",
+                        "Saisissez votre code pour déverrouiller l'accès complet sans restriction :",
                         fontSize = 13.sp,
                         color = SecondaryText
                     )
                     OutlinedTextField(
                         value = masterPinInput,
                         onValueChange = { masterPinInput = it },
-                        label = { Text("Code Développeur") },
+                        label = { Text("Code Développeur Master") },
                         placeholder = { Text("PARAMASTER2026") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
@@ -383,7 +447,7 @@ fun ActivationScreen(
                                 Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
                                 onActivated()
                             } else {
-                                Toast.makeText(context, "Code développeur incorrect !", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Code incorrect !", Toast.LENGTH_SHORT).show()
                             }
                         }),
                         modifier = Modifier.fillMaxWidth()
@@ -399,7 +463,7 @@ fun ActivationScreen(
                             Toast.makeText(context, res.second, Toast.LENGTH_SHORT).show()
                             onActivated()
                         } else {
-                            Toast.makeText(context, "Code développeur incorrect !", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Code incorrect !", Toast.LENGTH_SHORT).show()
                         }
                     }
                 ) {
