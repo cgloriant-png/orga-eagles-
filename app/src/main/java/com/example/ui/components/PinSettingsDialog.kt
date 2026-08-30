@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,7 +24,8 @@ fun PinSettingsDialog(
     onDismiss: () -> Unit,
     currentPin: String,
     onSavePin: (String) -> Unit,
-    onResetPin: () -> Unit
+    onResetPin: () -> Unit,
+    onOpenLicenseAdmin: (() -> Unit)? = null
 ) {
     if (!isOpen) return
 
@@ -108,6 +110,20 @@ fun PinSettingsDialog(
                     Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Réinitialiser au code standard (1234)", fontSize = 12.sp)
+                }
+
+                if (onOpenLicenseAdmin != null) {
+                    Button(
+                        onClick = onOpenLicenseAdmin,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        border = BorderStroke(1.dp, Color(0xFFFFD54F)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Key, contentDescription = null, tint = Color(0xFFFFD54F), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Centre de Licences & Clés d'activation", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         },

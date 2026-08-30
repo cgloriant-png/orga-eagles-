@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
                 var showStandardDayDialog by remember { mutableStateOf(false) }
                 var showPinSettingsDialog by remember { mutableStateOf(false) }
                 var showSyncSettingsDialog by remember { mutableStateOf(false) }
+                var showLicenseAdminDialog by remember { mutableStateOf(false) }
                 var dateForStandardDay by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
                 var datesForStandardDay by remember { mutableStateOf<List<String>>(emptyList()) }
                 var initialDateForSlotDialog by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
@@ -284,6 +285,14 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.size(34.dp)
                                         ) {
                                             Icon(Icons.Default.Security, contentDescription = "Sécurité & PIN", tint = Color.White)
+                                        }
+
+                                        // License Admin / Key Generator button
+                                        IconButton(
+                                            onClick = { showLicenseAdminDialog = true },
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Icon(Icons.Default.Key, contentDescription = "Gestion des Licences", tint = Color(0xFFFFD54F))
                                         }
 
                                         // Switch to Student Mode button (Lock for students)
@@ -865,8 +874,20 @@ class MainActivity : ComponentActivity() {
                     onDismiss = { showPinSettingsDialog = false },
                     currentPin = instructorPin,
                     onSavePin = { viewModel.setInstructorPin(it) },
-                    onResetPin = { viewModel.resetInstructorPin() }
+                    onResetPin = { viewModel.resetInstructorPin() },
+                    onOpenLicenseAdmin = {
+                        showPinSettingsDialog = false
+                        showLicenseAdminDialog = true
+                    }
                 )
+
+                // Dialog: License Admin & Key Generation
+                if (showLicenseAdminDialog) {
+                    LicenseAdminDialog(
+                        onDismiss = { showLicenseAdminDialog = false },
+                        onStatusChanged = { /* License status updated */ }
+                    )
+                }
             }
         }
     }
