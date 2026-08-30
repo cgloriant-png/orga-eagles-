@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -52,6 +53,7 @@ fun ActivationScreen(
 
     var showMasterPinDialog by remember { mutableStateOf(false) }
     var masterPinInput by remember { mutableStateOf("") }
+    var logoTapCount by remember { mutableIntStateOf(0) }
 
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
@@ -127,13 +129,20 @@ fun ActivationScreen(
         ) {
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Eagles Academy Logo
+            // Eagles Academy Logo (Tap 5 times to open hidden Master code dialog)
             Box(
                 modifier = Modifier
                     .size(90.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color.White)
-                    .padding(4.dp),
+                    .padding(4.dp)
+                    .clickable {
+                        logoTapCount++
+                        if (logoTapCount >= 5) {
+                            logoTapCount = 0
+                            showMasterPinDialog = true
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -399,21 +408,7 @@ fun ActivationScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Developer / Creator Master Unlock Button
-            TextButton(
-                onClick = { showMasterPinDialog = true }
-            ) {
-                Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = SecondaryText, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Accès Moniteur / Développeur",
-                    color = SecondaryText,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 
@@ -424,19 +419,19 @@ fun ActivationScreen(
                 masterPinInput = ""
             },
             icon = { Icon(Icons.Default.Security, contentDescription = null, tint = PrimaryBlueDark) },
-            title = { Text("Code Moniteur / Développeur", fontWeight = FontWeight.Bold) },
+            title = { Text("Code Développeur Master", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Saisissez votre code pour déverrouiller l'accès complet sans restriction :",
+                        "Saisissez votre code secret pour déverrouiller l'accès complet :",
                         fontSize = 13.sp,
                         color = SecondaryText
                     )
                     OutlinedTextField(
                         value = masterPinInput,
                         onValueChange = { masterPinInput = it },
-                        label = { Text("Code Développeur Master") },
-                        placeholder = { Text("PARAMASTER2026") },
+                        label = { Text("Code Secret Master") },
+                        placeholder = { Text("••••••••••••") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
