@@ -37,7 +37,7 @@ fun WebShareDialog(
     val scrollState = rememberScrollState()
 
     val cleanSchool = schoolCode.trim().uppercase()
-    val defaultUrl = "https://cgloriant.github.io/Paramoteur_FFPLUM/"
+    val defaultUrl = "https://cgloriant-png.github.io/orga-eagles-/"
     var webPortalUrl by remember {
         mutableStateOf(prefs.getString("custom_student_web_url", defaultUrl) ?: defaultUrl)
     }

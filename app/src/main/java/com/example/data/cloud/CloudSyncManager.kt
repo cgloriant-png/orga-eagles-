@@ -129,7 +129,7 @@ class CloudSyncManager(
         syncJob?.cancel()
         syncJob = scope.launch(Dispatchers.IO) {
             delay(100)
-            syncFromCloud()
+            syncFromCloud(forcePushMerged = true)
 
             while (isActive) {
                 delay(3500)
@@ -173,8 +173,8 @@ class CloudSyncManager(
 
     private fun compressPayload(jsonStr: String): String {
         return try {
-            if (jsonStr.length < 1200) {
-                jsonStr // Plain JSON is fine for small payloads
+            if (jsonStr.length < 60000) {
+                jsonStr // Plain JSON is best for instant browser & mobile interoperability
             } else {
                 val bos = ByteArrayOutputStream()
                 GZIPOutputStream(bos).use { it.write(jsonStr.toByteArray(Charsets.UTF_8)) }
@@ -216,6 +216,18 @@ class CloudSyncManager(
                 if (sender == myDeviceId) return // Own echo
 
                 mergeSnapshotIntoLocalDb(snapshotJson)
+
+                val totalSlots = dao.getSlotsCount()
+                val totalStudents = dao.getStudentsCount()
+                val totalBookings = dao.getAllBookingsList().size
+
+                _syncedSlotsCount.value = totalSlots
+                _syncedStudentsCount.value = totalStudents
+                _syncedBookingsCount.value = totalBookings
+                _syncStatus.value = SyncStatus.CONNECTED_SYNCED
+                _statusMessage.value = "En direct (${_schoolCode.value})"
+                val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.FRANCE)
+                _lastSyncTime.value = timeFormat.format(Date())
             } else {
                 // Ping notification -> poll full cloud state
                 syncFromCloud()

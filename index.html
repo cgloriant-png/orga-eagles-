@@ -14,6 +14,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <!-- Pako for universal GZIP compression & decompression -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 
   <style>
     :root {
@@ -51,7 +53,7 @@
       user-select: none;
     }
 
-    input, textarea {
+    input, textarea, select {
       user-select: text;
     }
 
@@ -63,7 +65,7 @@
       display: flex;
       flex-direction: column;
       padding-top: var(--safe-top);
-      padding-bottom: calc(var(--safe-bottom) + 70px);
+      padding-bottom: calc(var(--safe-bottom) + 75px);
       overflow-x: hidden;
     }
 
@@ -71,9 +73,9 @@
       position: sticky;
       top: 0;
       z-index: 50;
-      background: rgba(11, 19, 41, 0.92);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background: rgba(11, 19, 41, 0.95);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
       border-bottom: 1px solid var(--border-color);
       padding: 12px 16px;
       display: flex;
@@ -85,11 +87,12 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      cursor: pointer;
     }
 
     .brand-icon {
-      width: 36px;
-      height: 36px;
+      width: 38px;
+      height: 38px;
       background: linear-gradient(135deg, #0284c7, #0369a1);
       border-radius: 10px;
       display: flex;
@@ -116,13 +119,20 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
+      padding: 5px 12px;
       background: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
+      font-size: 11.5px;
+      font-weight: 700;
       color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .sync-badge:active {
+      transform: scale(0.96);
+      background: var(--bg-surface);
     }
 
     .sync-dot {
@@ -145,9 +155,9 @@
     }
 
     @keyframes pulse {
-      0% { opacity: 0.4; }
+      0% { opacity: 0.3; }
       50% { opacity: 1; }
-      100% { opacity: 0.4; }
+      100% { opacity: 0.3; }
     }
 
     .ios-banner {
@@ -235,7 +245,7 @@
 
     .slot-item.booked-by-me {
       border: 1.5px solid var(--primary-light);
-      background: linear-gradient(180deg, rgba(2, 132, 199, 0.08), var(--bg-card));
+      background: linear-gradient(180deg, rgba(2, 132, 199, 0.12), var(--bg-card));
     }
 
     .slot-header {
@@ -508,7 +518,7 @@
 
     #toast {
       position: fixed;
-      bottom: 80px;
+      bottom: 85px;
       left: 50%;
       transform: translateX(-50%) translateY(100px);
       background: #0f172a;
@@ -551,7 +561,7 @@
         <div class="brand-subtitle" id="schoolSubtitle">Plouharnel (56) • École Élèves</div>
       </div>
     </div>
-    <div class="sync-badge" onclick="triggerManualSync()">
+    <div class="sync-badge" onclick="triggerManualSync()" title="Cliquer pour actualiser immédiatement">
       <div class="sync-dot" id="syncDot"></div>
       <span id="syncText">En direct</span>
     </div>
@@ -563,12 +573,12 @@
     <!-- TAB 1: PLANNING & RESERVATIONS -->
     <div id="tabPlanning">
       <div class="filters-row">
-        <button class="filter-pill active" onclick="setFilter('TOUS')">Tous les créneaux</button>
-        <button class="filter-pill" onclick="setFilter('TODAY')">Aujourd'hui</button>
-        <button class="filter-pill" onclick="setFilter('TOMORROW')">Demain</button>
-        <button class="filter-pill" onclick="setFilter('WEEK')">Cette semaine</button>
-        <button class="filter-pill" onclick="setFilter('VOL')">✈️ Vols seuls</button>
-        <button class="filter-pill" onclick="setFilter('GONFLAGE')">🪂 Gonflages</button>
+        <button class="filter-pill active" onclick="setFilter('TOUS', this)">Tous les créneaux</button>
+        <button class="filter-pill" onclick="setFilter('TODAY', this)">Aujourd'hui</button>
+        <button class="filter-pill" onclick="setFilter('TOMORROW', this)">Demain</button>
+        <button class="filter-pill" onclick="setFilter('WEEK', this)">Cette semaine</button>
+        <button class="filter-pill" onclick="setFilter('VOL', this)">✈️ Vols seuls</button>
+        <button class="filter-pill" onclick="setFilter('GONFLAGE', this)">🪂 Gonflages</button>
       </div>
 
       <div id="weatherAlertBanner" style="display: none; margin-bottom: 12px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 10px 14px; font-size: 13px; color: #fca5a5;"></div>
@@ -576,7 +586,7 @@
       <div id="slotsContainer">
         <div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
           <div style="font-size: 32px; margin-bottom: 10px;">⏳</div>
-          <p>Chargement des créneaux de vol & gonflage...</p>
+          <p>Connexion et chargement du planning en cours...</p>
         </div>
       </div>
     </div>
@@ -620,6 +630,10 @@
           <span>ID Appareil :</span>
           <span id="profileDeviceId" style="font-family: var(--font-mono); color: var(--primary-light);"></span>
         </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+          <span>Code École :</span>
+          <span id="profileSchoolCode" style="font-family: var(--font-mono); color: #fff; font-weight: bold;"></span>
+        </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
           <span>Validité Clé :</span>
           <span id="profileLicenseStatus" style="color: #34d399; font-weight: 600;"></span>
@@ -650,7 +664,7 @@
   <div class="modal-backdrop" id="profileModal" style="display: none;">
     <div class="modal-content">
       <h3 style="font-size: 17px; font-weight: 800; margin-bottom: 6px;">👤 Vos Coordonnées Élève</h3>
-      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Ces informations permettent au moniteur de vous identifier lors de vos réservations.</p>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Ces informations permettent au moniteur de vous identifier instantanément dans l'application école.</p>
       
       <div style="margin-bottom: 12px;">
         <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">PRÉNOM *</label>
@@ -678,7 +692,7 @@
         </select>
       </div>
 
-      <button class="btn btn-primary" onclick="saveProfileFromModal()">Enregistrer mon profil</button>
+      <button class="btn btn-primary" onclick="saveProfileFromModal()">Enregistrer & Synchroniser</button>
     </div>
   </div>
 
@@ -723,8 +737,9 @@
 
   <script>
     const SECRET_SALT = "PARAMOTEUR_SECURE_SALT_COMP_2026_X99F";
-    const MASTER_CODES = ["PARAMASTER2026", "DEV-UNLOCK-MASTER", "PARAMOTEUR-SUPER-ADMIN"];
+    const MASTER_CODES = ["PARAMASTER2026", "DEV-UNLOCK-MASTER", "PARAMOTEUR-SUPER-ADMIN", "EAGLES2026"];
     
+    // Read school code from URL Hash (e.g. #PLOUHARNEL) or default
     let schoolCode = window.location.hash ? window.location.hash.replace('#', '').trim().toUpperCase() : "PLOUHARNEL";
     if (!schoolCode) schoolCode = "PLOUHARNEL";
 
@@ -763,6 +778,7 @@
       myDeviceId = "PM-" + part1 + "-" + part2;
       document.getElementById("activationDeviceId").innerText = myDeviceId;
       document.getElementById("profileDeviceId").innerText = myDeviceId;
+      document.getElementById("profileSchoolCode").innerText = schoolCode;
     }
 
     async function verifyLicenseKey(devId, keyStr) {
@@ -920,8 +936,34 @@
       localStorage.setItem("eagles_profile_phone", phone);
       localStorage.setItem("eagles_profile_level", level);
 
+      // Register or update student record immediately in localStudents
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      let st = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
+      if (!st) {
+        st = {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          firstName: first,
+          lastName: last,
+          phone: phone,
+          email: "",
+          level: level,
+          notes: "Élève connecté via Web / iPhone",
+          completedSessions: 0,
+          createdAt: Date.now()
+        };
+        localStudents.push(st);
+      } else {
+        st.firstName = first;
+        st.lastName = last;
+        st.phone = phone;
+        st.level = level;
+      }
+
+      localStorage.setItem("eagles_cache_students", JSON.stringify(localStudents));
+      pushBookingUpdate();
+
       document.getElementById("profileModal").style.display = "none";
-      showToast("Profil enregistré !");
+      showToast("Profil enregistré et synchronisé !");
       renderProfile();
       renderSlots();
     }
@@ -954,38 +996,77 @@
       return clean ? `paramoteur_${clean}_v6` : 'paramoteur_plouharnel_v6';
     }
 
+    // Decompress payload from plain JSON or GZ Base64
+    async function decompressMessage(raw) {
+      if (!raw || typeof raw !== "string") return null;
+      const trimmed = raw.trim();
+      if (trimmed.startsWith("{") && trimmed.includes('"slots"')) {
+        return trimmed; // Plain JSON string
+      }
+      if (trimmed.startsWith("GZ:")) {
+        try {
+          const b64 = trimmed.substring(3);
+          const binStr = atob(b64);
+          const bytes = new Uint8Array(binStr.length);
+          for (let i = 0; i < binStr.length; i++) {
+            bytes[i] = binStr.charCodeAt(i);
+          }
+          if (typeof DecompressionStream !== "undefined") {
+            const ds = new DecompressionStream("gzip");
+            const writer = ds.writable.getWriter();
+            writer.write(bytes);
+            writer.close();
+            const response = new Response(ds.readable);
+            return await response.text();
+          } else if (window.pako) {
+            return window.pako.inflate(bytes, { to: 'string' });
+          }
+        } catch (e) {
+          console.warn("GZ decompression error", e);
+        }
+      }
+      return trimmed;
+    }
+
     function startRealtimeSync() {
       const topic = getNtfyTopic();
       const sseUrl = `https://ntfy.sh/${topic}/sse`;
 
       if (sseEventSource) {
-        sseEventSource.close();
+        try { sseEventSource.close(); } catch(e) {}
       }
 
       updateSyncStatus("syncing", "Connexion...");
 
-      sseEventSource = new EventSource(sseUrl);
+      try {
+        sseEventSource = new EventSource(sseUrl);
 
-      sseEventSource.onopen = () => {
-        updateSyncStatus("online", "En direct");
-        pollFullSnapshot();
-      };
+        sseEventSource.onopen = () => {
+          updateSyncStatus("online", "En direct");
+          pollFullSnapshot();
+        };
 
-      sseEventSource.onmessage = (event) => {
-        try {
-          const ntfyData = JSON.parse(event.data);
-          if (ntfyData.event === "message" && ntfyData.message) {
-            handleIncomingSnapshot(ntfyData.message);
+        sseEventSource.onmessage = async (event) => {
+          try {
+            const ntfyData = JSON.parse(event.data);
+            if (ntfyData.event === "message" && ntfyData.message) {
+              const decompressed = await decompressMessage(ntfyData.message);
+              if (decompressed) {
+                handleIncomingSnapshot(decompressed);
+              }
+            }
+          } catch (e) {
+            console.error("SSE parse error", e);
           }
-        } catch (e) {
-          console.error("SSE parse error", e);
-        }
-      };
+        };
 
-      sseEventSource.onerror = () => {
-        updateSyncStatus("offline", "Reconnexion...");
-        setTimeout(() => pollFullSnapshot(), 3000);
-      };
+        sseEventSource.onerror = () => {
+          updateSyncStatus("offline", "Reconnexion...");
+          setTimeout(() => pollFullSnapshot(), 3000);
+        };
+      } catch (err) {
+        console.warn("SSE init error", err);
+      }
 
       setInterval(() => {
         pollFullSnapshot();
@@ -995,8 +1076,10 @@
     function updateSyncStatus(state, label) {
       const dot = document.getElementById("syncDot");
       const text = document.getElementById("syncText");
-      dot.className = "sync-dot " + (state === "online" ? "" : state);
-      text.innerText = label;
+      if (dot && text) {
+        dot.className = "sync-dot " + (state === "online" ? "" : state);
+        text.innerText = label;
+      }
     }
 
     async function pollFullSnapshot() {
@@ -1010,9 +1093,12 @@
         for (let i = lines.length - 1; i >= 0; i--) {
           try {
             const msgObj = JSON.parse(lines[i]);
-            if (msgObj.message && msgObj.message.includes('"slots"')) {
-              handleIncomingSnapshot(msgObj.message);
-              break;
+            if (msgObj.message) {
+              const decompressed = await decompressMessage(msgObj.message);
+              if (decompressed && decompressed.startsWith("{") && decompressed.includes('"slots"')) {
+                handleIncomingSnapshot(decompressed);
+                break;
+              }
             }
           } catch (e) {}
         }
@@ -1023,8 +1109,8 @@
 
     function handleIncomingSnapshot(rawJson) {
       try {
-        const snapshot = JSON.parse(rawJson);
-        if (!snapshot.slots) return;
+        const snapshot = typeof rawJson === "string" ? JSON.parse(rawJson) : rawJson;
+        if (!snapshot || !snapshot.slots) return;
 
         if (snapshot.revokedDevices && Array.isArray(snapshot.revokedDevices)) {
           localStorage.setItem("eagles_revoked_devs", JSON.stringify(snapshot.revokedDevices));
@@ -1071,6 +1157,8 @@
           deletedStudentIds: []
         };
 
+        const payloadStr = JSON.stringify(payload);
+
         await fetch(`https://ntfy.sh/${topic}`, {
           method: "POST",
           headers: {
@@ -1078,7 +1166,7 @@
             "Priority": "high",
             "Tags": "cloud,sync"
           },
-          body: JSON.stringify(payload)
+          body: payloadStr
         });
 
         updateSyncStatus("online", "En direct");
@@ -1096,7 +1184,8 @@
         return;
       }
 
-      let st = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
+      const cleanPhone = p.phone.replace(/[^0-9]/g, '');
+      let st = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
       if (!st) {
         st = {
           id: Date.now() + Math.floor(Math.random() * 1000),
@@ -1105,7 +1194,7 @@
           phone: p.phone,
           email: "",
           level: p.level,
-          notes: "",
+          notes: "Inscrit via Web / iPhone",
           completedSessions: 0,
           createdAt: Date.now()
         };
@@ -1120,7 +1209,8 @@
 
       const slot = localSlots.find(s => s.id === slotId);
       const currentCount = localBookings.filter(b => b.slotId === slotId).length;
-      const isWaitlist = slot && currentCount >= slot.maxCapacity;
+      const maxCap = slot ? (slot.maxCapacity || 4) : 4;
+      const isWaitlist = currentCount >= maxCap;
 
       const newBooking = {
         id: Date.now() + Math.floor(Math.random() * 1000),
@@ -1141,7 +1231,8 @@
 
     function handleUnenroll(slotId) {
       const p = getProfile();
-      const st = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
+      const cleanPhone = p.phone.replace(/[^0-9]/g, '');
+      const st = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
       if (!st) return;
 
       if (confirm("Voulez-vous vraiment annuler votre inscription à ce créneau ?")) {
@@ -1156,20 +1247,30 @@
     function renderSlots() {
       const container = document.getElementById("slotsContainer");
       const p = getProfile();
-      const myStudent = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
+      const cleanPhone = p.phone.replace(/[^0-9]/g, '');
+      const myStudent = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
       const myStudentId = myStudent ? myStudent.id : null;
 
       let filtered = [...localSlots];
       
-      const todayIso = new Date().toISOString().split('T')[0];
-      const tomDate = new Date();
+      const now = new Date();
+      const todayIso = now.toISOString().split('T')[0];
+      
+      const tomDate = new Date(now);
       tomDate.setDate(tomDate.getDate() + 1);
       const tomorrowIso = tomDate.toISOString().split('T')[0];
+
+      // End of week (next 7 days)
+      const weekEndDate = new Date(now);
+      weekEndDate.setDate(weekEndDate.getDate() + 7);
+      const weekEndIso = weekEndDate.toISOString().split('T')[0];
 
       if (currentFilter === "TODAY") {
         filtered = filtered.filter(s => s.dateIso === todayIso);
       } else if (currentFilter === "TOMORROW") {
         filtered = filtered.filter(s => s.dateIso === tomorrowIso);
+      } else if (currentFilter === "WEEK") {
+        filtered = filtered.filter(s => s.dateIso >= todayIso && s.dateIso <= weekEndIso);
       } else if (currentFilter === "VOL") {
         filtered = filtered.filter(s => s.lessonType.toUpperCase() === "VOL");
       } else if (currentFilter === "GONFLAGE") {
@@ -1181,9 +1282,12 @@
       if (filtered.length === 0) {
         container.innerHTML = `
           <div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
-            <div style="font-size: 32px; margin-bottom: 8px;">📅</div>
-            <p style="font-weight: 700; color: #fff;">Aucun créneau disponible</p>
-            <p style="font-size: 12px; margin-top: 4px;">Le moniteur publiera bientôt les prochaines séances.</p>
+            <div style="font-size: 36px; margin-bottom: 8px;">📅</div>
+            <p style="font-weight: 800; font-size: 16px; color: #fff;">Aucun créneau disponible</p>
+            <p style="font-size: 12px; margin-top: 4px; line-height: 1.4;">Le moniteur publiera bientôt les prochaines séances.</p>
+            <button class="btn btn-outline" style="width: auto; margin-top: 14px; padding: 6px 14px; font-size: 12px;" onclick="triggerManualSync()">
+              🔄 Actualiser le planning
+            </button>
           </div>
         `;
         return;
@@ -1269,11 +1373,15 @@
     function renderMyBookings() {
       const container = document.getElementById("myBookingsList");
       const p = getProfile();
-      const myStudent = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
+      const cleanPhone = p.phone.replace(/[^0-9]/g, '');
+      const myStudent = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
       const myStudentId = myStudent ? myStudent.id : null;
 
       if (!myStudentId) {
-        container.innerHTML = `<p style="color: var(--text-muted); font-size: 13px;">Renseignez votre profil pour voir vos réservations.</p>`;
+        container.innerHTML = `
+          <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 10px;">Renseignez votre profil pour voir vos réservations.</p>
+          <button class="btn btn-primary" onclick="openProfileModal()">Renseigner mon profil</button>
+        `;
         return;
       }
 
@@ -1323,8 +1431,12 @@
     function renderProgress() {
       const container = document.getElementById("progressDisplay");
       const p = getProfile();
-      const myStudent = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
-      if (!myStudent) return;
+      const cleanPhone = p.phone.replace(/[^0-9]/g, '');
+      const myStudent = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
+      if (!myStudent) {
+        container.innerHTML = `<p style="font-size: 12px; color: var(--text-muted);">Renseignez votre profil pour afficher votre livret FFPLUM.</p>`;
+        return;
+      }
 
       const prog = localProgress.find(pr => pr.studentId === myStudent.id);
       if (!prog) {
@@ -1369,15 +1481,18 @@
       document.getElementById("navBtnProfile").classList.toggle("active", tab === 'profile');
     }
 
-    function setFilter(f) {
+    function setFilter(f, btnEl) {
       currentFilter = f;
       document.querySelectorAll(".filter-pill").forEach(pill => pill.classList.remove("active"));
-      event.target.classList.add("active");
+      if (btnEl) {
+        btnEl.classList.add("active");
+      }
       renderSlots();
     }
 
     function triggerManualSync() {
       showToast("Actualisation en direct...", "🔄");
+      updateSyncStatus("syncing", "Actualisation...");
       pollFullSnapshot();
     }
 
