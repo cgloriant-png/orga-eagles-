@@ -157,6 +157,7 @@ data class StudentWithStats(
 }
 
 data class StandardDayConfig(
+    val useAstronomicalSunTimes: Boolean = true,
     val sunriseHour: Int = 6,
     val sunriseMinute: Int = 30,
     val sunsetHour: Int = 21,

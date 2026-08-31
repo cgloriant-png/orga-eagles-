@@ -46,6 +46,7 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     // Saved Default Standard Day Config
     private val _savedStandardDayConfig = MutableStateFlow(
         StandardDayConfig(
+            useAstronomicalSunTimes = prefs.getBoolean("std_use_astro", true),
             sunriseHour = prefs.getInt("std_sun_rise_h", 6),
             sunriseMinute = prefs.getInt("std_sun_rise_m", 30),
             sunsetHour = prefs.getInt("std_sun_set_h", 21),
@@ -195,6 +196,7 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     fun saveDefaultStandardDayConfig(config: StandardDayConfig) {
         _savedStandardDayConfig.value = config
         prefs.edit()
+            .putBoolean("std_use_astro", config.useAstronomicalSunTimes)
             .putInt("std_sun_rise_h", config.sunriseHour)
             .putInt("std_sun_rise_m", config.sunriseMinute)
             .putInt("std_sun_set_h", config.sunsetHour)

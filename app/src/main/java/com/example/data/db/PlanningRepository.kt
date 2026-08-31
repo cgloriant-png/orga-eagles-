@@ -277,12 +277,12 @@ class PlanningRepository(
         dateIso: String,
         config: StandardDayConfig = StandardDayConfig()
     ): List<Long> {
-        // If config sunrise/sunset are at default values, calculate exact solar times for Plouharnel (56)
+        // Calculate exact astronomical solar times for this specific date (Plouharnel 56)
         val sunTimes = SunCalculator.calculateSunTimes(dateIso)
-        val sunriseH = if (config.sunriseHour == 6 && config.sunriseMinute == 30) sunTimes.sunriseHour else config.sunriseHour
-        val sunriseM = if (config.sunriseHour == 6 && config.sunriseMinute == 30) sunTimes.sunriseMinute else config.sunriseMinute
-        val sunsetH = if (config.sunsetHour == 21 && config.sunsetMinute == 0) sunTimes.sunsetHour else config.sunsetHour
-        val sunsetM = if (config.sunsetHour == 21 && config.sunsetMinute == 0) sunTimes.sunsetMinute else config.sunsetMinute
+        val sunriseH = if (config.useAstronomicalSunTimes) sunTimes.sunriseHour else config.sunriseHour
+        val sunriseM = if (config.useAstronomicalSunTimes) sunTimes.sunriseMinute else config.sunriseMinute
+        val sunsetH = if (config.useAstronomicalSunTimes) sunTimes.sunsetHour else config.sunsetHour
+        val sunsetM = if (config.useAstronomicalSunTimes) sunTimes.sunsetMinute else config.sunsetMinute
 
         val sunriseStart = String.format(Locale.US, "%02d:%02d", sunriseH, sunriseM)
         val sunrisePlus1 = String.format(Locale.US, "%02d:%02d", (sunriseH + 1).coerceAtMost(23), sunriseM)
@@ -305,7 +305,7 @@ class PlanningRepository(
                 lessonType = "VOL",
                 location = location,
                 maxCapacity = config.morningVolCapacity,
-                notes = "Aérologie calme du lever du soleil (Aube jusqu'à 2h après le lever)"
+                notes = "Aérologie calme du lever du soleil ($sunriseStart à $sunrisePlus2)"
             ),
             LessonSlotEntity(
                 dateIso = dateIso,
@@ -315,7 +315,7 @@ class PlanningRepository(
                 lessonType = "GONFLAGE",
                 location = location,
                 maxCapacity = config.morningGonflageCapacity,
-                notes = "Brise matinale de 1h à 3h après le lever"
+                notes = "Brise matinale de 1h à 3h après le lever ($sunrisePlus1 à $sunrisePlus3)"
             ),
             LessonSlotEntity(
                 dateIso = dateIso,
@@ -325,7 +325,7 @@ class PlanningRepository(
                 lessonType = "GONFLAGE",
                 location = location,
                 maxCapacity = config.eveningGonflageCapacity,
-                notes = "Gonflage fin d'après-midi de 3h à 1h avant le coucher"
+                notes = "Gonflage fin d'après-midi de 3h à 1h avant le coucher ($sunsetMinus3 à $sunsetMinus1)"
             ),
             LessonSlotEntity(
                 dateIso = dateIso,
@@ -335,7 +335,7 @@ class PlanningRepository(
                 lessonType = "VOL",
                 location = location,
                 maxCapacity = config.eveningVolCapacity,
-                notes = "Restitution & vol calme de 2h avant jusqu'au coucher"
+                notes = "Restitution & vol calme de 2h avant jusqu'au coucher ($sunsetMinus2 à $sunsetEnd)"
             )
         )
 

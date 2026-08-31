@@ -33,24 +33,29 @@ fun StandardDayDialog(
     onConfirmMultiple: ((dates: List<String>, config: StandardDayConfig, saveAsDefault: Boolean) -> Unit)? = null
 ) {
     val datesList = remember(initialDateIso, selectedDates) {
-        if (selectedDates.isNotEmpty()) selectedDates else if (initialDateIso.isNotBlank()) listOf(initialDateIso) else listOf(java.text.SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(java.util.Date()))
+        if (selectedDates.isNotEmpty()) selectedDates.sorted() else if (initialDateIso.isNotBlank()) listOf(initialDateIso) else listOf(java.text.SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(java.util.Date()))
     }
     val isMultiDate = datesList.size > 1
 
     var dateIso by remember { mutableStateOf(datesList.firstOrNull() ?: initialDateIso) }
 
-    // Compute astronomical sunrise / sunset for the initial date at Plouharnel (56)
-    val autoSunTimes = remember(dateIso) {
-        SunCalculator.calculateSunTimes(dateIso)
-    }
+    // Multi-date first and last solar ephemeris calculation
+    val firstDate = datesList.firstOrNull() ?: dateIso
+    val lastDate = datesList.lastOrNull() ?: dateIso
 
-    // Sunrise / Sunset hours (initialized with astronomical calculation for Plouharnel)
-    var sunriseHour by remember { mutableIntStateOf(autoSunTimes.sunriseHour) }
-    var sunriseMinute by remember { mutableIntStateOf(autoSunTimes.sunriseMinute) }
-    var sunsetHour by remember { mutableIntStateOf(autoSunTimes.sunsetHour) }
-    var sunsetMinute by remember { mutableIntStateOf(autoSunTimes.sunsetMinute) }
+    val firstSunTimes = remember(firstDate) { SunCalculator.calculateSunTimes(firstDate) }
+    val lastSunTimes = remember(lastDate) { SunCalculator.calculateSunTimes(lastDate) }
 
-    // Whenever date changes, automatically update sunrise / sunset according to Plouharnel ephemeris
+    // Astronomical calculation toggle (True by default to calculate exact sunrise/sunset per day)
+    var useAstronomicalSunTimes by remember { mutableStateOf(initialConfig.useAstronomicalSunTimes) }
+
+    // Sunrise / Sunset hours (used when astronomical calculation is disabled for manual override)
+    var sunriseHour by remember { mutableIntStateOf(firstSunTimes.sunriseHour) }
+    var sunriseMinute by remember { mutableIntStateOf(firstSunTimes.sunriseMinute) }
+    var sunsetHour by remember { mutableIntStateOf(firstSunTimes.sunsetHour) }
+    var sunsetMinute by remember { mutableIntStateOf(firstSunTimes.sunsetMinute) }
+
+    // Whenever date changes in single date mode, automatically update sunrise / sunset
     LaunchedEffect(dateIso) {
         val calculated = SunCalculator.calculateSunTimes(dateIso)
         sunriseHour = calculated.sunriseHour
@@ -69,16 +74,17 @@ fun StandardDayDialog(
 
     var saveAsDefault by remember { mutableStateOf(false) }
 
-    // Calculated slot preview strings
-    val sunriseStartStr = String.format(Locale.US, "%02d:%02d", sunriseHour, sunriseMinute)
-    val sunrisePlus1Str = String.format(Locale.US, "%02d:%02d", (sunriseHour + 1).coerceAtMost(23), sunriseMinute)
-    val sunrisePlus2Str = String.format(Locale.US, "%02d:%02d", (sunriseHour + 2).coerceAtMost(23), sunriseMinute)
-    val sunrisePlus3Str = String.format(Locale.US, "%02d:%02d", (sunriseHour + 3).coerceAtMost(23), sunriseMinute)
+    // Calculated slot preview strings for display
+    val previewSunTimes = if (isMultiDate) firstSunTimes else SunCalculator.calculateSunTimes(dateIso)
+    val sunriseStartStr = if (useAstronomicalSunTimes) previewSunTimes.sunriseStr else String.format(Locale.US, "%02d:%02d", sunriseHour, sunriseMinute)
+    val sunrisePlus1Str = if (useAstronomicalSunTimes) previewSunTimes.morningGonflageStart else String.format(Locale.US, "%02d:%02d", (sunriseHour + 1).coerceAtMost(23), sunriseMinute)
+    val sunrisePlus2Str = if (useAstronomicalSunTimes) previewSunTimes.morningVolEnd else String.format(Locale.US, "%02d:%02d", (sunriseHour + 2).coerceAtMost(23), sunriseMinute)
+    val sunrisePlus3Str = if (useAstronomicalSunTimes) previewSunTimes.morningGonflageEnd else String.format(Locale.US, "%02d:%02d", (sunriseHour + 3).coerceAtMost(23), sunriseMinute)
 
-    val sunsetMinus3Str = String.format(Locale.US, "%02d:%02d", (sunsetHour - 3).coerceAtLeast(0), sunsetMinute)
-    val sunsetMinus2Str = String.format(Locale.US, "%02d:%02d", (sunsetHour - 2).coerceAtLeast(0), sunsetMinute)
-    val sunsetMinus1Str = String.format(Locale.US, "%02d:%02d", (sunsetHour - 1).coerceAtLeast(0), sunsetMinute)
-    val sunsetEndStr = String.format(Locale.US, "%02d:%02d", sunsetHour.coerceAtMost(23), sunsetMinute)
+    val sunsetMinus3Str = if (useAstronomicalSunTimes) previewSunTimes.eveningGonflageStart else String.format(Locale.US, "%02d:%02d", (sunsetHour - 3).coerceAtLeast(0), sunsetMinute)
+    val sunsetMinus2Str = if (useAstronomicalSunTimes) previewSunTimes.eveningVolStart else String.format(Locale.US, "%02d:%02d", (sunsetHour - 2).coerceAtLeast(0), sunsetMinute)
+    val sunsetMinus1Str = if (useAstronomicalSunTimes) previewSunTimes.eveningGonflageEnd else String.format(Locale.US, "%02d:%02d", (sunsetHour - 1).coerceAtLeast(0), sunsetMinute)
+    val sunsetEndStr = if (useAstronomicalSunTimes) previewSunTimes.sunsetStr else String.format(Locale.US, "%02d:%02d", sunsetHour.coerceAtMost(23), sunsetMinute)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -90,12 +96,12 @@ fun StandardDayDialog(
                 Text("⚡", fontSize = 22.sp)
                 Column {
                     Text(
-                        if (isMultiDate) "Créer Journée Type (${datesList.size} jours)" else "Créer une Journée Type",
+                        if (isMultiDate) "Journée Type (${datesList.size} jours)" else "Créer une Journée Type",
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp
                     )
                     Text(
-                        if (isMultiDate) "Éphémérides calculées automatiquement par jour" else "Calcul éphémérides auto • Plouharnel (56)",
+                        if (useAstronomicalSunTimes) "Éphémérides auto par jour • Plouharnel (56)" else "Horaires fixes manuels",
                         fontSize = 11.sp,
                         color = PrimaryBlue,
                         fontWeight = FontWeight.SemiBold
@@ -117,23 +123,22 @@ fun StandardDayDialog(
                         border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.5f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                "📅 ${datesList.size} jours sélectionnés :",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = HighDensityHeaderTitle
-                            )
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("📅", fontSize = 14.sp)
+                                Text(
+                                    "${datesList.size} dates sélectionnées :",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = HighDensityHeaderTitle
+                                )
+                            }
                             Text(
                                 datesList.joinToString(", "),
                                 fontSize = 11.sp,
                                 color = PrimaryBlue,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                "Les 4 créneaux (Vol & Gonflage) seront automatiquement générés et adaptés aux heures solaires de chaque jour.",
-                                fontSize = 10.sp,
-                                color = SecondaryText
+                                fontWeight = FontWeight.Medium,
+                                lineHeight = 14.sp
                             )
                         }
                     }
@@ -149,99 +154,152 @@ fun StandardDayDialog(
                     )
                 }
 
-                // Ephemeris Auto Calculation Banner (Plouharnel 56)
+                // Solar Ephemeris Mode Card
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = PrimaryBlueContainer.copy(alpha = 0.6f),
-                    border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.4f)),
+                    color = if (useAstronomicalSunTimes) PrimaryBlueContainer.copy(alpha = 0.6f) else HighDensityBg,
+                    border = BorderStroke(1.dp, if (useAstronomicalSunTimes) PrimaryBlue.copy(alpha = 0.5f) else BorderOutline),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { useAstronomicalSunTimes = !useAstronomicalSunTimes },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("📍", fontSize = 14.sp)
-                                Text("Éphémérides Plouharnel (56)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = PrimaryBlue)
-                            }
-                            TextButton(
-                                onClick = {
-                                    val calculated = SunCalculator.calculateSunTimes(dateIso)
-                                    sunriseHour = calculated.sunriseHour
-                                    sunriseMinute = calculated.sunriseMinute
-                                    sunsetHour = calculated.sunsetHour
-                                    sunsetMinute = calculated.sunsetMinute
-                                },
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                modifier = Modifier.height(24.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Text("🔄 Recalculer", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text(if (useAstronomicalSunTimes) "☀️" else "🕒", fontSize = 16.sp)
+                                Column {
+                                    Text(
+                                        "Calcul solaire automatique (Plouharnel)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (useAstronomicalSunTimes) PrimaryBlueDark else HighDensityHeaderTitle
+                                    )
+                                    Text(
+                                        if (useAstronomicalSunTimes) "Adapte automatiquement les créneaux au lever/coucher de chaque date" else "Horaires fixes identiques pour toutes les dates",
+                                        fontSize = 10.sp,
+                                        color = SecondaryText,
+                                        lineHeight = 12.sp
+                                    )
+                                }
                             }
+                            Switch(
+                                checked = useAstronomicalSunTimes,
+                                onCheckedChange = { useAstronomicalSunTimes = it }
+                            )
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "🌅 Lever : ${autoSunTimes.sunriseStr}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = HighDensityHeaderTitle
-                            )
-                            Text("•", color = SecondaryText)
-                            Text(
-                                "🌇 Coucher : ${autoSunTimes.sunsetStr}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = HighDensityHeaderTitle
-                            )
+                        if (useAstronomicalSunTimes) {
+                            Divider(color = PrimaryBlue.copy(alpha = 0.2f))
+
+                            if (isMultiDate) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("Évolution solaire sur la période :", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = PrimaryBlueDark)
+                                    
+                                    // First date preview
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("• $firstDate (Début) :", fontSize = 10.5.sp, fontWeight = FontWeight.Medium, color = HighDensityHeaderTitle)
+                                        Text("🌅 ${firstSunTimes.sunriseStr}  🌇 ${firstSunTimes.sunsetStr}", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                                    }
+
+                                    // Last date preview
+                                    if (firstDate != lastDate) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("• $lastDate (Fin) :", fontSize = 10.5.sp, fontWeight = FontWeight.Medium, color = HighDensityHeaderTitle)
+                                            Text("🌅 ${lastSunTimes.sunriseStr}  🌇 ${lastSunTimes.sunsetStr}", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                                        }
+                                    }
+
+                                    Text(
+                                        "✨ Chaque jour aura ses créneaux calés sur ses propres heures de lever et coucher.",
+                                        fontSize = 9.5.sp,
+                                        color = Color(0xFF0D9488),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "🌅 Lever : ${previewSunTimes.sunriseStr}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = HighDensityHeaderTitle
+                                    )
+                                    Text("•", color = SecondaryText)
+                                    Text(
+                                        "🌇 Coucher : ${previewSunTimes.sunsetStr}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = HighDensityHeaderTitle
+                                    )
+                                }
+                            }
                         }
                     }
                 }
 
-                // Adjust Sunrise / Sunset fields
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = sunriseStartStr,
-                        onValueChange = { text ->
-                            val parts = text.split(":")
-                            if (parts.size == 2) {
-                                parts[0].toIntOrNull()?.let { sunriseHour = it.coerceIn(0, 23) }
-                                parts[1].toIntOrNull()?.let { sunriseMinute = it.coerceIn(0, 59) }
-                            }
-                        },
-                        label = { Text("🌅 Lever Soleil") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
-                    )
+                // If manual mode: show manual time inputs
+                if (!useAstronomicalSunTimes) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = sunriseStartStr,
+                            onValueChange = { text ->
+                                val parts = text.split(":")
+                                if (parts.size == 2) {
+                                    parts[0].toIntOrNull()?.let { sunriseHour = it.coerceIn(0, 23) }
+                                    parts[1].toIntOrNull()?.let { sunriseMinute = it.coerceIn(0, 59) }
+                                }
+                            },
+                            label = { Text("🌅 Heure Lever") },
+                            placeholder = { Text("07:00") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
 
-                    OutlinedTextField(
-                        value = sunsetEndStr,
-                        onValueChange = { text ->
-                            val parts = text.split(":")
-                            if (parts.size == 2) {
-                                parts[0].toIntOrNull()?.let { sunsetHour = it.coerceIn(0, 23) }
-                                parts[1].toIntOrNull()?.let { sunsetMinute = it.coerceIn(0, 59) }
-                            }
-                        },
-                        label = { Text("🌇 Coucher Soleil") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
-                    )
+                        OutlinedTextField(
+                            value = sunsetEndStr,
+                            onValueChange = { text ->
+                                val parts = text.split(":")
+                                if (parts.size == 2) {
+                                    parts[0].toIntOrNull()?.let { sunsetHour = it.coerceIn(0, 23) }
+                                    parts[1].toIntOrNull()?.let { sunsetMinute = it.coerceIn(0, 59) }
+                                }
+                            },
+                            label = { Text("🌇 Heure Coucher") },
+                            placeholder = { Text("20:30") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
                 }
 
                 // Location
@@ -257,13 +315,23 @@ fun StandardDayDialog(
 
                 Divider(color = BorderOutline.copy(alpha = 0.5f))
 
-                // Custom Capacities Section
-                Text(
-                    text = "Capacité des créneaux (Nombre de places) :",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = HighDensityHeaderTitle
-                )
+                // Custom Capacities Section with Rules
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Règles des 4 créneaux & Capacités :",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HighDensityHeaderTitle
+                    )
+                    if (useAstronomicalSunTimes) {
+                        Text(
+                            text = "Les horaires affichés ci-dessous sont à titre indicatif pour le 1er jour ($firstDate). Chaque date suivante appliquera ces mêmes règles solaires relatives.",
+                            fontSize = 10.sp,
+                            color = SecondaryText,
+                            lineHeight = 12.sp
+                        )
+                    }
+                }
 
                 Column(
                     modifier = Modifier
@@ -329,6 +397,7 @@ fun StandardDayDialog(
             Button(
                 onClick = {
                     val config = StandardDayConfig(
+                        useAstronomicalSunTimes = useAstronomicalSunTimes,
                         sunriseHour = sunriseHour,
                         sunriseMinute = sunriseMinute,
                         sunsetHour = sunsetHour,
