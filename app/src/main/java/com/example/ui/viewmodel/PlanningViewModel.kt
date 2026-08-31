@@ -127,6 +127,10 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
         allProgress = repository.allProgress
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        viewModelScope.launch {
+            repository.purgeDummyStudents()
+        }
     }
 
     fun clearAllData() {

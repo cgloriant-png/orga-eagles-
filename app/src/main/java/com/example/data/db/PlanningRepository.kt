@@ -518,6 +518,18 @@ class PlanningRepository(
         """.trimIndent()
     }
 
+    suspend fun purgeDummyStudents() {
+        val dummyNames = listOf("Jean", "Sophie", "Lucas", "Thomas", "Marie")
+        val dummyLasts = listOf("Dupont", "Martin", "Bernard", "Petit", "Leroy")
+        val allStudents = planningDao.getAllStudentsList()
+        for (st in allStudents) {
+            if (st.firstName.trim() in dummyNames && st.lastName.trim() in dummyLasts) {
+                deleteStudent(st)
+            }
+        }
+        cloudSyncManager?.forceSyncNow()
+    }
+
     suspend fun clearAllData() {
         val allSlots = planningDao.getAllSlotsList()
         val allStudents = planningDao.getAllStudentsList()

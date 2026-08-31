@@ -296,19 +296,70 @@ class CloudSyncManager(
                         pollResp.close()
                         val lines = bodyText.split("\n").filter { it.isNotBlank() }
 
-                        // Iterate in reverse (newest first) to find the most recent valid snapshot
-                        for (line in lines.reversed()) {
+                        // Collect and merge across all historical snapshots to ensure no student or slot is ever lost
+                        val aggregatedSlots = mutableMapOf<Long, JSONObject>()
+                        val aggregatedStudents = mutableMapOf<Long, JSONObject>()
+                        val aggregatedBookings = mutableMapOf<Long, JSONObject>()
+                        val aggregatedProgress = mutableMapOf<Long, JSONObject>()
+                        val aggregatedDeletedSlots = mutableSetOf<Long>()
+                        val aggregatedDeletedBookings = mutableSetOf<Long>()
+                        val aggregatedDeletedStudents = mutableSetOf<Long>()
+
+                        for (line in lines) {
                             try {
                                 val msgObj = JSONObject(line)
                                 val rawMsg = msgObj.optString("message", "")
                                 if (rawMsg.isNotBlank()) {
                                     val decompressed = decompressPayload(rawMsg)
                                     if (decompressed.startsWith("{") && decompressed.contains("\"slots\"")) {
-                                        remoteSnapshot = JSONObject(decompressed)
-                                        break
+                                        val snap = JSONObject(decompressed)
+                                        val slotsArr = snap.optJSONArray("slots") ?: JSONArray()
+                                        for (i in 0 until slotsArr.length()) {
+                                            val s = slotsArr.getJSONObject(i)
+                                            aggregatedSlots[s.optLong("id")] = s
+                                        }
+                                        val studsArr = snap.optJSONArray("students") ?: JSONArray()
+                                        for (i in 0 until studsArr.length()) {
+                                            val st = studsArr.getJSONObject(i)
+                                            val fn = st.optString("firstName", "").trim()
+                                            val ln = st.optString("lastName", "").trim()
+                                            // Purge sample dummy students
+                                            val isDummy = (fn in listOf("Jean", "Sophie", "Lucas", "Thomas", "Marie") && ln in listOf("Dupont", "Martin", "Bernard", "Petit", "Leroy"))
+                                            if (!isDummy) {
+                                                aggregatedStudents[st.optLong("id")] = st
+                                            }
+                                        }
+                                        val bksArr = snap.optJSONArray("bookings") ?: JSONArray()
+                                        for (i in 0 until bksArr.length()) {
+                                            val b = bksArr.getJSONObject(i)
+                                            aggregatedBookings[b.optLong("id")] = b
+                                        }
+                                        val prgArr = snap.optJSONArray("progress") ?: JSONArray()
+                                        for (i in 0 until prgArr.length()) {
+                                            val p = prgArr.getJSONObject(i)
+                                            aggregatedProgress[p.optLong("studentId")] = p
+                                        }
+                                        val delS = snap.optJSONArray("deletedSlotIds") ?: JSONArray()
+                                        for (i in 0 until delS.length()) aggregatedDeletedSlots.add(delS.getLong(i))
+                                        val delB = snap.optJSONArray("deletedBookingIds") ?: JSONArray()
+                                        for (i in 0 until delB.length()) aggregatedDeletedBookings.add(delB.getLong(i))
+                                        val delSt = snap.optJSONArray("deletedStudentIds") ?: JSONArray()
+                                        for (i in 0 until delSt.length()) aggregatedDeletedStudents.add(delSt.getLong(i))
                                     }
                                 }
                             } catch (ignored: Exception) {}
+                        }
+
+                        if (aggregatedSlots.isNotEmpty() || aggregatedStudents.isNotEmpty()) {
+                            val mergedObj = JSONObject()
+                            mergedObj.put("slots", JSONArray(aggregatedSlots.values))
+                            mergedObj.put("students", JSONArray(aggregatedStudents.values))
+                            mergedObj.put("bookings", JSONArray(aggregatedBookings.values))
+                            mergedObj.put("progress", JSONArray(aggregatedProgress.values))
+                            mergedObj.put("deletedSlotIds", JSONArray(aggregatedDeletedSlots.toList()))
+                            mergedObj.put("deletedBookingIds", JSONArray(aggregatedDeletedBookings.toList()))
+                            mergedObj.put("deletedStudentIds", JSONArray(aggregatedDeletedStudents.toList()))
+                            remoteSnapshot = mergedObj
                         }
                     } else {
                         pollResp.close()
