@@ -33,10 +33,10 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
     val studentsWithStats: StateFlow<List<StudentWithStats>>
     val allProgress: StateFlow<List<StudentProgressEntity>>
 
-    // App Mode: true = Version Élève (par défaut pour les nouveaux utilisateurs), false = Mode Moniteur
+    // App Mode: false = Mode Moniteur (par défaut), true = Mode Élève
     private val prefs = application.getSharedPreferences("paramoteur_planning_prefs", android.content.Context.MODE_PRIVATE)
 
-    private val _isStudentMode = MutableStateFlow(prefs.getBoolean("is_student_mode", true))
+    private val _isStudentMode = MutableStateFlow(prefs.getBoolean("is_student_mode", false))
     val isStudentMode: StateFlow<Boolean> = _isStudentMode.asStateFlow()
 
     // Instructor PIN (defaults to "1234")
@@ -127,6 +127,17 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
         allProgress = repository.allProgress
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        viewModelScope.launch {
+            repository.seedDefaultDataIfEmpty()
+        }
+    }
+
+    fun generateSampleData() {
+        viewModelScope.launch {
+            repository.seedDefaultDataIfEmpty(force = true)
+            _feedbackMessage.emit("Planning type et élèves exemples réinitialisés avec succès !")
+        }
     }
 
     fun toggleAppMode() {

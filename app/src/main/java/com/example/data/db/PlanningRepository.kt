@@ -517,4 +517,34 @@ class PlanningRepository(
             ${if (slot.isCancelled) "Pour votre sécurité, la séance est annulée. Nous vous tiendrons informés du prochain créneau praticable !" else "Nous surveillons l'évolution de la brise et du gradient avant le départ."}
         """.trimIndent()
     }
+
+    suspend fun seedDefaultDataIfEmpty(force: Boolean = false) {
+        val studentCount = planningDao.getStudentsCount()
+        val slotCount = planningDao.getSlotsCount()
+        if (!force && (studentCount > 0 || slotCount > 0)) {
+            return
+        }
+
+        val sampleStudents = listOf(
+            StudentEntity(id = generateUniqueId(), firstName = "Jean", lastName = "Dupont", phone = "0612345678", email = "jean.dupont@email.fr", level = "Gonflage"),
+            StudentEntity(id = generateUniqueId(), firstName = "Sophie", lastName = "Martin", phone = "0698765432", email = "sophie.martin@email.fr", level = "Vol"),
+            StudentEntity(id = generateUniqueId(), firstName = "Lucas", lastName = "Bernard", phone = "0711223344", email = "lucas.b@email.fr", level = "Perfectionnement"),
+            StudentEntity(id = generateUniqueId(), firstName = "Thomas", lastName = "Petit", phone = "0655443322", email = "thomas.p@email.fr", level = "Breveté"),
+            StudentEntity(id = generateUniqueId(), firstName = "Marie", lastName = "Leroy", phone = "0677889900", email = "marie.leroy@email.fr", level = "Gonflage")
+        )
+
+        planningDao.insertStudents(sampleStudents)
+
+        val cal = Calendar.getInstance()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE)
+        val defaultDayConfig = StandardDayConfig()
+
+        for (i in 0..6) {
+            val dateStr = sdf.format(cal.time)
+            createStandardDaySlots(dateStr, defaultDayConfig)
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+
+        cloudSyncManager?.pushFullSync(immediate = true)
+    }
 }

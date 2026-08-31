@@ -348,6 +348,14 @@ class MainActivity : ComponentActivity() {
                                                     leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
                                                 )
                                                 DropdownMenuItem(
+                                                    text = { Text("Générer semaine type & exemples") },
+                                                    onClick = {
+                                                        showTopOverflow = false
+                                                        viewModel.generateSampleData()
+                                                    },
+                                                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF3B82F6)) }
+                                                )
+                                                DropdownMenuItem(
                                                     text = { Text("Changer le code PIN") },
                                                     onClick = {
                                                         showTopOverflow = false
