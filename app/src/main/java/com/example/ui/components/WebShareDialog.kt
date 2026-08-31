@@ -33,12 +33,19 @@ fun WebShareDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("paramoteur_web_share_prefs", Context.MODE_PRIVATE) }
     val scrollState = rememberScrollState()
 
-    // Public web student portal URL or data URL
     val cleanSchool = schoolCode.trim().uppercase()
+    val defaultUrl = "https://cgloriant.github.io/Paramoteur_FFPLUM/"
+    var webPortalUrl by remember {
+        mutableStateOf(prefs.getString("custom_student_web_url", defaultUrl) ?: defaultUrl)
+    }
 
     fun getStudentShareMessage(): String {
+        val targetUrl = webPortalUrl.trim().ifEmpty { defaultUrl }
+        val fullUrl = if (targetUrl.contains("#")) targetUrl else "$targetUrl#$cleanSchool"
+
         return """
 🦅 *EAGLES ACADEMY - ESPACE ÉLÈVES & PLANNING*
 École de Paramoteur de Plouharnel
@@ -46,7 +53,7 @@ fun WebShareDialog(
 Voici le lien pour consulter le planning et réserver vos séances de vol et de gonflage sur votre iPhone, Android ou ordinateur :
 
 📲 *Accès Web & iPhone :*
-https://paramoteur-eleves.web.app/#$cleanSchool
+$fullUrl
 
 💡 *Installation sur iPhone (recommandé) :*
 1. Ouvrez le lien dans Safari
@@ -60,11 +67,27 @@ Bon vol à tous ! 🪂
         """.trimIndent()
     }
 
+    fun saveUrl(newUrl: String) {
+        webPortalUrl = newUrl
+        prefs.edit().putString("custom_student_web_url", newUrl).apply()
+    }
+
     fun copyText(text: String, label: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText(label, text)
         clipboard.setPrimaryClip(clip)
         Toast.makeText(context, "$label copié dans le presse-papiers !", Toast.LENGTH_SHORT).show()
+    }
+
+    fun testUrlInBrowser() {
+        val targetUrl = webPortalUrl.trim().ifEmpty { defaultUrl }
+        val fullUrl = if (targetUrl.contains("#")) targetUrl else "$targetUrl#$cleanSchool"
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Impossible d'ouvrir le lien : $fullUrl", Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun shareWhatsApp(text: String) {
@@ -148,22 +171,79 @@ Bon vol à tous ! 🪂
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Explicative Card
+                // URL Configuration Card
                 Card(
                     shape = RoundedCornerShape(10.dp),
                     colors = CardDefaults.cardColors(containerColor = HighDensitySurface),
-                    border = BorderStroke(1.dp, CardBorder)
+                    border = BorderStroke(1.dp, PrimaryBlue)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            "🌐 URL du portail Web / iPhone :",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFF38BDF8)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = webPortalUrl,
+                            onValueChange = { saveUrl(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, color = Color.White),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF38BDF8),
+                                unfocusedBorderColor = Color(0xFF334155),
+                                focusedContainerColor = Color(0xFF0B1329),
+                                unfocusedContainerColor = Color(0xFF0B1329)
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { testUrlInBrowser() },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f).height(36.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Tester le lien", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = { saveUrl(defaultUrl) },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(36.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Text("Réinit.", fontSize = 11.5.sp, color = Color.LightGray)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Explicative Card: How to activate on GitHub
+                Card(
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                    border = BorderStroke(1.dp, Color(0xFF1E293B))
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = GreenSuccess, modifier = Modifier.size(16.dp))
-                            Text("Résolution pour les élèves sur iPhone", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                            Text("🐙", fontSize = 14.sp)
+                            Text("Activation GitHub Pages (10 secondes)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            "Les utilisateurs d'iPhone n'ont pas besoin d'installer de fichier APK. Ils ouvrent simplement la Web App dans Safari et l'ajoutent à leur écran d'accueil.",
-                            fontSize = 11.5.sp,
-                            color = Color.White.copy(alpha = 0.85f),
+                            "1. Poussez vos modifications sur GitHub.\n2. Sur GitHub, allez dans **Settings > Pages**.\n3. Sous 'Build and deployment', sélectionnez la branche **main** et le dossier **/docs** ou **/** puis cliquez sur **Save**.\n4. Votre portail élèves est instantanément en ligne !",
+                            fontSize = 11.sp,
+                            color = Color(0xFFCBD5E1),
                             lineHeight = 16.sp
                         )
                     }
