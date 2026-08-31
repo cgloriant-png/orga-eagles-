@@ -198,6 +198,20 @@ Bon vol à tous ! 🪂
                                 unfocusedContainerColor = Color(0xFF0B1329)
                             )
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
+                        // Preset GitHub Pages
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            AssistChip(
+                                onClick = { saveUrl("https://cgloriant-png.github.io/orga-eagles-/") },
+                                label = { Text("🐙 GitHub Pages (Actif & Vérifié)", fontSize = 11.sp) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),

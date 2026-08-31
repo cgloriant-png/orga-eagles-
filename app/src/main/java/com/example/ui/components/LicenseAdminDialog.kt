@@ -238,11 +238,15 @@ fun LicenseAdminDialog(
                                 }
                                 Button(
                                     onClick = {
+                                        val prefs = context.getSharedPreferences("paramoteur_web_share_prefs", Context.MODE_PRIVATE)
+                                        val targetUrl = prefs.getString("custom_student_web_url", "https://cgloriant-png.github.io/orga-eagles-/") ?: "https://cgloriant-png.github.io/orga-eagles-/"
+                                        val fullUrl = if (targetUrl.contains("#")) targetUrl else "${targetUrl.trimEnd('/')}/#PLOUHARNEL"
+
                                         val shareText = """
 🦅 *EAGLES ACADEMY - PLANNING ÉLÈVES*
 Accès iPhone & Web pour réserver vos créneaux de vol & gonflage :
 
-📲 https://paramoteur-eleves.web.app/#PLOUHARNEL
+📲 $fullUrl
 
 💡 Sur iPhone : Ouvrir dans Safari ➔ Partager ➔ Sur l'écran d'accueil.
 Transmettez ensuite votre ID appareil affiché pour recevoir votre clé d'activation !

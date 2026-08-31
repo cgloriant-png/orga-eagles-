@@ -129,6 +129,7 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         viewModelScope.launch {
+            repository.loadInitialRealDataIfEmpty(application)
             repository.purgeDummyStudents()
         }
     }

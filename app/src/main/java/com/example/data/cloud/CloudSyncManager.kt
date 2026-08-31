@@ -206,7 +206,22 @@ class CloudSyncManager(
             val eventType = ntfyObj.optString("event", "")
             if (eventType != "message") return
 
-            val rawMessage = ntfyObj.optString("message", "")
+            var rawMessage = ntfyObj.optString("message", "")
+            val attachmentObj = ntfyObj.optJSONObject("attachment")
+            val attachmentUrl = attachmentObj?.optString("url", "")
+            if (!attachmentUrl.isNullOrBlank() && (rawMessage.isBlank() || rawMessage.contains("You received a file"))) {
+                try {
+                    val req = Request.Builder().url(attachmentUrl).get().build()
+                    httpClient.newCall(req).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            rawMessage = resp.body?.string() ?: ""
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Attachment fetch error: ${e.message}")
+                }
+            }
+
             if (rawMessage.isBlank()) return
 
             val decompressed = decompressPayload(rawMessage)
@@ -308,7 +323,19 @@ class CloudSyncManager(
                         for (line in lines) {
                             try {
                                 val msgObj = JSONObject(line)
-                                val rawMsg = msgObj.optString("message", "")
+                                var rawMsg = msgObj.optString("message", "")
+                                val attachmentObj = msgObj.optJSONObject("attachment")
+                                val attachmentUrl = attachmentObj?.optString("url", "")
+                                if (!attachmentUrl.isNullOrBlank() && (rawMsg.isBlank() || rawMsg.contains("You received a file"))) {
+                                    try {
+                                        val req = Request.Builder().url(attachmentUrl).get().build()
+                                        httpClient.newCall(req).execute().use { resp ->
+                                            if (resp.isSuccessful) {
+                                                rawMsg = resp.body?.string() ?: ""
+                                            }
+                                        }
+                                    } catch (e: Exception) {}
+                                }
                                 if (rawMsg.isNotBlank()) {
                                     val decompressed = decompressPayload(rawMsg)
                                     if (decompressed.startsWith("{") && decompressed.contains("\"slots\"")) {

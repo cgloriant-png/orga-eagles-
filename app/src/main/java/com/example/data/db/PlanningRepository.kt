@@ -518,6 +518,89 @@ class PlanningRepository(
         """.trimIndent()
     }
 
+    suspend fun loadInitialRealDataIfEmpty(context: android.content.Context) {
+        val studentCount = planningDao.getStudentsCount()
+        val slotCount = planningDao.getSlotsCount()
+        if (studentCount > 0 && slotCount > 0) return
+
+        try {
+            val jsonString = context.assets.open("initial_real_data.json").bufferedReader().use { it.readText() }
+            val root = org.json.JSONObject(jsonString)
+            val studs = root.optJSONArray("students") ?: org.json.JSONArray()
+            val slots = root.optJSONArray("slots") ?: org.json.JSONArray()
+            val bks = root.optJSONArray("bookings") ?: org.json.JSONArray()
+
+            val studentEntities = mutableListOf<StudentEntity>()
+            for (i in 0 until studs.length()) {
+                val s = studs.getJSONObject(i)
+                studentEntities.add(
+                    StudentEntity(
+                        id = s.optLong("id"),
+                        firstName = s.optString("firstName"),
+                        lastName = s.optString("lastName"),
+                        phone = s.optString("phone"),
+                        email = s.optString("email"),
+                        level = s.optString("level", "Gonflage"),
+                        notes = s.optString("notes"),
+                        completedSessions = s.optInt("completedSessions", 0),
+                        createdAt = s.optLong("createdAt", System.currentTimeMillis())
+                    )
+                )
+            }
+
+            val slotEntities = mutableListOf<LessonSlotEntity>()
+            for (i in 0 until slots.length()) {
+                val s = slots.getJSONObject(i)
+                slotEntities.add(
+                    LessonSlotEntity(
+                        id = s.optLong("id"),
+                        dateIso = s.optString("dateIso"),
+                        startTime = s.optString("startTime"),
+                        endTime = s.optString("endTime"),
+                        title = s.optString("title"),
+                        lessonType = s.optString("lessonType", "GONFLAGE"),
+                        location = s.optString("location"),
+                        maxCapacity = s.optInt("maxCapacity", 4),
+                        notes = s.optString("notes"),
+                        isCancelled = s.optBoolean("isCancelled", false),
+                        weatherAlert = s.optString("weatherAlert", ""),
+                        cancelReason = s.optString("cancelReason", ""),
+                        postponedTo = s.optString("postponedTo", ""),
+                        createdAt = s.optLong("createdAt", System.currentTimeMillis())
+                    )
+                )
+            }
+
+            val bookingEntities = mutableListOf<BookingEntity>()
+            for (i in 0 until bks.length()) {
+                val b = bks.getJSONObject(i)
+                bookingEntities.add(
+                    BookingEntity(
+                        id = b.optLong("id"),
+                        slotId = b.optLong("slotId"),
+                        studentId = b.optLong("studentId"),
+                        registeredAt = b.optLong("registeredAt", System.currentTimeMillis()),
+                        isWaitingList = b.optBoolean("isWaitingList", false),
+                        attended = b.optBoolean("attended", false)
+                    )
+                )
+            }
+
+            if (studentCount == 0 && studentEntities.isNotEmpty()) {
+                planningDao.insertStudents(studentEntities)
+            }
+            if (slotCount == 0 && slotEntities.isNotEmpty()) {
+                planningDao.insertSlots(slotEntities)
+            }
+            if (bookingEntities.isNotEmpty()) {
+                planningDao.insertBookings(bookingEntities)
+            }
+            cloudSyncManager?.pushFullSync(immediate = true)
+        } catch (e: Exception) {
+            android.util.Log.e("PlanningRepository", "Error loading initial real data: ${e.message}", e)
+        }
+    }
+
     suspend fun purgeDummyStudents() {
         val dummyNames = listOf("Jean", "Sophie", "Lucas", "Thomas", "Marie")
         val dummyLasts = listOf("Dupont", "Martin", "Bernard", "Petit", "Leroy")

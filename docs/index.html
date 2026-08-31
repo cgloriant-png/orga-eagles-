@@ -516,6 +516,215 @@
       overflow-y: auto;
     }
 
+    /* Calendar Month View Styles */
+    .view-mode-toggle {
+      display: flex;
+      background: var(--bg-inner);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 3px;
+      margin-bottom: 12px;
+      gap: 4px;
+    }
+
+    .view-mode-btn {
+      flex: 1;
+      padding: 9px 12px;
+      border-radius: 9px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-main);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .view-mode-btn.active {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(2, 132, 199, 0.4);
+    }
+
+    .month-nav-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+    }
+
+    .month-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+      text-transform: capitalize;
+      letter-spacing: -0.2px;
+    }
+
+    .month-nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .month-nav-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      min-width: 32px;
+      height: 32px;
+      padding: 0 8px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      transition: all 0.15s;
+    }
+
+    .month-nav-btn:active {
+      transform: scale(0.92);
+      background: var(--primary);
+    }
+
+    .calendar-grid-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 12px 6px;
+      margin-bottom: 14px;
+    }
+
+    .calendar-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      text-align: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    .calendar-days-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+
+    .cal-day-cell {
+      min-height: 58px;
+      background: var(--bg-inner);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 9px;
+      padding: 4px 2px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+
+    .cal-day-cell:active {
+      transform: scale(0.95);
+    }
+
+    .cal-day-cell.other-month {
+      opacity: 0.15;
+      pointer-events: none;
+    }
+
+    .cal-day-cell.status-available {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .cal-day-cell.status-full {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .cal-day-cell.is-today {
+      border-color: var(--primary-light);
+      background: rgba(2, 132, 199, 0.18);
+    }
+
+    .cal-day-cell.is-selected {
+      border-color: #38bdf8;
+      background: rgba(2, 132, 199, 0.4) !important;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+    }
+
+    .cal-day-cell.has-booked {
+      border-color: var(--warning-orange);
+    }
+
+    .cal-day-num {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1;
+    }
+
+    .cal-capacity-badge {
+      font-size: 8.5px;
+      font-weight: 800;
+      padding: 1.5px 3px;
+      border-radius: 4px;
+      margin-top: 1px;
+      max-width: 100%;
+      white-space: nowrap;
+      text-align: center;
+      line-height: 1.1;
+    }
+
+    .cal-badge {
+      font-size: 8px;
+      font-weight: 800;
+      padding: 1.5px 3px;
+      border-radius: 4px;
+      margin-top: 1px;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.1;
+      text-align: center;
+    }
+
+    .cal-badge-vol {
+      background: rgba(2, 132, 199, 0.85);
+      color: #fff;
+    }
+
+    .cal-badge-gonflage {
+      background: rgba(5, 150, 105, 0.85);
+      color: #fff;
+    }
+
+    .cal-booked-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--warning-orange);
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      box-shadow: 0 0 5px var(--warning-orange);
+    }
+
     #toast {
       position: fixed;
       bottom: 85px;
@@ -572,13 +781,56 @@
 
     <!-- TAB 1: PLANNING & RESERVATIONS -->
     <div id="tabPlanning">
-      <div class="filters-row">
-        <button class="filter-pill active" onclick="setFilter('TOUS', this)">Tous les créneaux</button>
-        <button class="filter-pill" onclick="setFilter('TODAY', this)">Aujourd'hui</button>
-        <button class="filter-pill" onclick="setFilter('TOMORROW', this)">Demain</button>
-        <button class="filter-pill" onclick="setFilter('WEEK', this)">Cette semaine</button>
-        <button class="filter-pill" onclick="setFilter('VOL', this)">✈️ Vols seuls</button>
-        <button class="filter-pill" onclick="setFilter('GONFLAGE', this)">🪂 Gonflages</button>
+      <!-- View Mode Switcher -->
+      <div class="view-mode-toggle">
+        <button class="view-mode-btn" id="btnModeList" onclick="switchViewMode('list')">
+          <span>📋</span> Vue Liste
+        </button>
+        <button class="view-mode-btn active" id="btnModeMonth" onclick="switchViewMode('month')">
+          <span>📅</span> Vue par Mois
+        </button>
+      </div>
+
+      <!-- LIST VIEW FILTERS -->
+      <div id="listFiltersSection" style="display: none;">
+        <div class="filters-row">
+          <button class="filter-pill active" onclick="setFilter('TOUS', this)">Tous</button>
+          <button class="filter-pill" onclick="setFilter('TODAY', this)">Aujourd'hui</button>
+          <button class="filter-pill" onclick="setFilter('TOMORROW', this)">Demain</button>
+          <button class="filter-pill" onclick="setFilter('WEEK', this)">Cette semaine</button>
+          <button class="filter-pill" onclick="setFilter('VOL', this)">✈️ Vols</button>
+          <button class="filter-pill" onclick="setFilter('GONFLAGE', this)">🪂 Gonflages</button>
+        </div>
+      </div>
+
+      <!-- MONTH VIEW CALENDAR SECTION -->
+      <div id="monthCalendarSection" style="display: block;">
+        <div class="month-nav-header">
+          <button class="month-nav-btn" onclick="changeCalendarMonth(-1)" title="Mois précédent">◀</button>
+          <div class="month-title" id="monthCalendarTitle">Septembre 2026</div>
+          <div class="month-nav-actions">
+            <button class="month-nav-btn" style="font-size: 11px; padding: 0 10px;" onclick="goCalendarToday()">Aujourd'hui</button>
+            <button class="month-nav-btn" onclick="changeCalendarMonth(1)" title="Mois suivant">▶</button>
+          </div>
+        </div>
+
+        <div class="calendar-grid-card">
+          <div class="calendar-weekdays">
+            <span>LUN</span>
+            <span>MAR</span>
+            <span>MER</span>
+            <span>JEU</span>
+            <span>VEN</span>
+            <span>SAM</span>
+            <span>DIM</span>
+          </div>
+          <div class="calendar-days-grid" id="calendarDaysGrid"></div>
+        </div>
+
+        <div id="selectedDateHeader" style="margin: 14px 4px 8px; font-size: 14px; font-weight: 800; color: #fff; display: flex; align-items: center; justify-content: space-between;">
+          <div id="selectedDateLabel">Séances du jour</div>
+          <div id="selectedDateCount" style="font-size: 11px; color: var(--primary-light); font-weight: 700;"></div>
+        </div>
       </div>
 
       <div id="weatherAlertBanner" style="display: none; margin-bottom: 12px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 10px 14px; font-size: 13px; color: #fca5a5;"></div>
@@ -752,6 +1004,10 @@
     let currentFilter = "TOUS";
     let secretTapCount = 0;
     let sseEventSource = null;
+
+    let currentViewMode = "month"; // 'month' or 'list'
+    let calendarDate = new Date();
+    let selectedCalendarDate = new Date().toISOString().split('T')[0];
 
     function showToast(msg, icon = "✅") {
       const toast = document.getElementById("toast");
@@ -996,6 +1252,25 @@
       return clean ? `paramoteur_${clean}_v6` : 'paramoteur_plouharnel_v6';
     }
 
+    // Compress JSON string with GZIP and encode as base64 with "GZ:" prefix
+    function compressPayload(jsonStr) {
+      if (window.pako) {
+        try {
+          const uint8 = new TextEncoder().encode(jsonStr);
+          const compressed = window.pako.gzip(uint8);
+          let binary = '';
+          const len = compressed.byteLength;
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(compressed[i]);
+          }
+          return "GZ:" + btoa(binary);
+        } catch (e) {
+          console.warn("pako compress error", e);
+        }
+      }
+      return jsonStr;
+    }
+
     // Decompress payload from plain JSON or GZ Base64
     async function decompressMessage(raw) {
       if (!raw || typeof raw !== "string") return null;
@@ -1049,10 +1324,19 @@
         sseEventSource.onmessage = async (event) => {
           try {
             const ntfyData = JSON.parse(event.data);
-            if (ntfyData.event === "message" && ntfyData.message) {
-              const decompressed = await decompressMessage(ntfyData.message);
-              if (decompressed) {
-                handleIncomingSnapshot(decompressed);
+            if (ntfyData.event === "message") {
+              let rawMsg = ntfyData.message || "";
+              if (ntfyData.attachment && ntfyData.attachment.url && (!rawMsg || rawMsg.includes("You received a file"))) {
+                try {
+                  const attRes = await fetch(ntfyData.attachment.url);
+                  if (attRes.ok) rawMsg = await attRes.text();
+                } catch (e) {}
+              }
+              if (rawMsg) {
+                const decompressed = await decompressMessage(rawMsg);
+                if (decompressed) {
+                  handleIncomingSnapshot(decompressed);
+                }
               }
             }
           } catch (e) {
@@ -1090,17 +1374,62 @@
         const text = await res.text();
         const lines = text.trim().split("\n").filter(l => l.trim().length > 0);
         
-        for (let i = lines.length - 1; i >= 0; i--) {
+        const aggSlots = new Map();
+        const aggStudents = new Map();
+        const aggBookings = new Map();
+        const aggProgress = new Map();
+        const aggDeletedSlots = new Set();
+        const aggDeletedBookings = new Set();
+        const aggDeletedStudents = new Set();
+        let latestRevokedDevices = [];
+
+        for (let i = 0; i < lines.length; i++) {
           try {
             const msgObj = JSON.parse(lines[i]);
-            if (msgObj.message) {
-              const decompressed = await decompressMessage(msgObj.message);
+            let rawMsg = msgObj.message || "";
+            if (msgObj.attachment && msgObj.attachment.url && (!rawMsg || rawMsg.includes("You received a file"))) {
+              try {
+                const attRes = await fetch(msgObj.attachment.url);
+                if (attRes.ok) rawMsg = await attRes.text();
+              } catch (e) {}
+            }
+            if (rawMsg) {
+              const decompressed = await decompressMessage(rawMsg);
               if (decompressed && decompressed.startsWith("{") && decompressed.includes('"slots"')) {
-                handleIncomingSnapshot(decompressed);
-                break;
+                const snap = JSON.parse(decompressed);
+                (snap.slots || []).forEach(s => aggSlots.set(s.id, s));
+                (snap.students || []).forEach(st => {
+                  const fn = (st.firstName || "").trim();
+                  const ln = (st.lastName || "").trim();
+                  const isDummy = (["Jean", "Sophie", "Lucas", "Thomas", "Marie"].includes(fn) && ["Dupont", "Martin", "Bernard", "Petit", "Leroy"].includes(ln));
+                  if (!isDummy) aggStudents.set(st.id, st);
+                });
+                (snap.bookings || []).forEach(b => aggBookings.set(b.id, b));
+                (snap.progress || []).forEach(p => aggProgress.set(p.studentId, p));
+                (snap.deletedSlotIds || []).forEach(id => aggDeletedSlots.add(id));
+                (snap.deletedBookingIds || []).forEach(id => aggDeletedBookings.add(id));
+                (snap.deletedStudentIds || []).forEach(id => aggDeletedStudents.add(id));
+                if (snap.revokedDevices && Array.isArray(snap.revokedDevices)) {
+                  latestRevokedDevices = snap.revokedDevices;
+                }
               }
             }
           } catch (e) {}
+        }
+
+        if (aggSlots.size > 0 || aggStudents.size > 0) {
+          const mergedSlots = Array.from(aggSlots.values()).filter(s => !aggDeletedSlots.has(s.id));
+          const mergedStudents = Array.from(aggStudents.values()).filter(st => !aggDeletedStudents.has(st.id));
+          const mergedBookings = Array.from(aggBookings.values()).filter(b => !aggDeletedBookings.has(b.id));
+          const mergedProgress = Array.from(aggProgress.values()).filter(p => !aggDeletedStudents.has(p.studentId));
+
+          handleIncomingSnapshot({
+            slots: mergedSlots,
+            students: mergedStudents,
+            bookings: mergedBookings,
+            progress: mergedProgress,
+            revokedDevices: latestRevokedDevices
+          });
         }
       } catch (err) {
         console.warn("Poll error", err);
@@ -1132,6 +1461,9 @@
 
         updateSyncStatus("online", "En direct");
         renderSlots();
+        if (currentViewMode === "month") {
+          renderMonthCalendar();
+        }
         renderMyBookings();
         renderProgress();
       } catch (e) {
@@ -1158,6 +1490,7 @@
         };
 
         const payloadStr = JSON.stringify(payload);
+        const compressed = compressPayload(payloadStr);
 
         await fetch(`https://ntfy.sh/${topic}`, {
           method: "POST",
@@ -1166,7 +1499,7 @@
             "Priority": "high",
             "Tags": "cloud,sync"
           },
-          body: payloadStr
+          body: compressed
         });
 
         updateSyncStatus("online", "En direct");
@@ -1222,7 +1555,13 @@
       };
 
       localBookings.push(newBooking);
+      localStorage.setItem("eagles_cache_bookings", JSON.stringify(localBookings));
+      localStorage.setItem("eagles_cache_students", JSON.stringify(localStudents));
+      
       renderSlots();
+      if (currentViewMode === "month") {
+        renderMonthCalendar();
+      }
       renderMyBookings();
       pushBookingUpdate();
 
@@ -1237,14 +1576,246 @@
 
       if (confirm("Voulez-vous vraiment annuler votre inscription à ce créneau ?")) {
         localBookings = localBookings.filter(b => !(b.slotId === slotId && b.studentId === st.id));
+        localStorage.setItem("eagles_cache_bookings", JSON.stringify(localBookings));
         renderSlots();
+        if (currentViewMode === "month") {
+          renderMonthCalendar();
+        }
         renderMyBookings();
         pushBookingUpdate();
         showToast("Inscription annulée.");
       }
     }
 
+    function switchViewMode(mode) {
+      currentViewMode = mode;
+      document.getElementById("btnModeList").classList.toggle("active", mode === "list");
+      document.getElementById("btnModeMonth").classList.toggle("active", mode === "month");
+      
+      document.getElementById("listFiltersSection").style.display = mode === "list" ? "block" : "none";
+      document.getElementById("monthCalendarSection").style.display = mode === "month" ? "block" : "none";
+
+      if (mode === "month") {
+        renderMonthCalendar();
+      } else {
+        renderSlots();
+      }
+    }
+
+    function changeCalendarMonth(delta) {
+      calendarDate.setMonth(calendarDate.getMonth() + delta);
+      renderMonthCalendar();
+    }
+
+    function goCalendarToday() {
+      calendarDate = new Date();
+      selectedCalendarDate = new Date().toISOString().split('T')[0];
+      renderMonthCalendar();
+    }
+
+    function selectCalendarDay(dateIso) {
+      selectedCalendarDate = dateIso;
+      renderMonthCalendar();
+    }
+
+    function renderMonthCalendar() {
+      const year = calendarDate.getFullYear();
+      const month = calendarDate.getMonth();
+
+      // Title e.g. "Septembre 2026"
+      const monthNames = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+      document.getElementById("monthCalendarTitle").innerText = `${monthNames[month]} ${year}`;
+
+      const grid = document.getElementById("calendarDaysGrid");
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const totalDays = lastDay.getDate();
+
+      // Day of week for 1st day (0=Sun, 1=Mon, ..., 6=Sat). We want Monday=0
+      let startDayOfWeek = firstDay.getDay() - 1;
+      if (startDayOfWeek < 0) startDayOfWeek = 6;
+
+      const p = getProfile();
+      const cleanPhone = p.phone.replace(/[^0-9]/g, '');
+      const myStudent = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
+      const myStudentId = myStudent ? myStudent.id : null;
+
+      const todayIso = new Date().toISOString().split('T')[0];
+
+      let cellsHtml = "";
+
+      // Previous month padding cells
+      const prevMonthLastDay = new Date(year, month, 0).getDate();
+      for (let i = 0; i < startDayOfWeek; i++) {
+        const d = prevMonthLastDay - startDayOfWeek + 1 + i;
+        cellsHtml += `<div class="cal-day-cell other-month"><div class="cal-day-num">${d}</div></div>`;
+      }
+
+      // Days of the month
+      for (let day = 1; day <= totalDays; day++) {
+        const mStr = String(month + 1).padStart(2, '0');
+        const dStr = String(day).padStart(2, '0');
+        const dateIso = `${year}-${mStr}-${dStr}`;
+
+        const isToday = dateIso === todayIso;
+        const isSelected = dateIso === selectedCalendarDate;
+
+        const daySlots = localSlots.filter(s => s.dateIso === dateIso);
+        const vols = daySlots.filter(s => s.lessonType.toUpperCase() === "VOL");
+        const gonflages = daySlots.filter(s => s.lessonType.toUpperCase() === "GONFLAGE");
+
+        // Occupancy calculation for color status
+        let totalEnrolled = 0;
+        let totalCap = 0;
+        daySlots.forEach(s => {
+          const count = localBookings.filter(b => b.slotId === s.id).length;
+          totalEnrolled += count;
+          totalCap += (s.maxCapacity || 4);
+        });
+
+        const isFull = daySlots.length > 0 && totalCap > 0 && totalEnrolled >= totalCap;
+        const isAvailable = daySlots.length > 0 && (!isFull);
+
+        let statusClass = "";
+        if (daySlots.length > 0) {
+          statusClass = isFull ? "status-full" : "status-available";
+        }
+
+        // Check if student has booked any slot on this day
+        const isBookedOnDay = myStudentId && localBookings.some(b => {
+          const slot = localSlots.find(s => s.id === b.slotId);
+          return slot && slot.dateIso === dateIso && b.studentId === myStudentId;
+        });
+
+        let badgesHtml = "";
+        if (daySlots.length > 0) {
+          if (vols.length > 0 && gonflages.length > 0) {
+            badgesHtml = `<div class="cal-badge cal-badge-vol">✈️ ${vols.length} 🪂 ${gonflages.length}</div>`;
+          } else if (vols.length > 0) {
+            badgesHtml = `<div class="cal-badge cal-badge-vol">✈️ ${vols.length > 1 ? vols.length + ' vols' : 'Vol'}</div>`;
+          } else if (gonflages.length > 0) {
+            badgesHtml = `<div class="cal-badge cal-badge-gonflage">🪂 ${gonflages.length > 1 ? gonflages.length + ' g.' : 'Gonf.'}</div>`;
+          }
+          badgesHtml += `<div class="cal-capacity-badge" style="color: ${isFull ? 'var(--danger-red)' : '#34d399'};">👤 ${totalEnrolled}/${totalCap}</div>`;
+        }
+
+        cellsHtml += `
+          <div class="cal-day-cell ${statusClass} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''} ${isBookedOnDay ? 'has-booked' : ''}" onclick="selectCalendarDay('${dateIso}')">
+            ${isBookedOnDay ? '<div class="cal-booked-dot" title="Vous êtes inscrit ce jour"></div>' : ''}
+            <div class="cal-day-num" style="${isToday ? 'color: var(--primary-light); font-weight: 900;' : ''}">${day}</div>
+            ${badgesHtml}
+          </div>
+        `;
+      }
+
+      grid.innerHTML = cellsHtml;
+
+      // Update selected date header label
+      document.getElementById("selectedDateLabel").innerText = `🗓️ ${formatFrenchDate(selectedCalendarDate)}`;
+      
+      const daySlots = localSlots.filter(s => s.dateIso === selectedCalendarDate);
+      document.getElementById("selectedDateCount").innerText = `${daySlots.length} séance${daySlots.length > 1 ? 's' : ''}`;
+
+      // Render slots for the selected date
+      renderSlotsForMonthView(selectedCalendarDate);
+    }
+
+    function renderSlotsForMonthView(dateIso) {
+      const container = document.getElementById("slotsContainer");
+      const p = getProfile();
+      const cleanPhone = p.phone.replace(/[^0-9]/g, '');
+      const myStudent = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
+      const myStudentId = myStudent ? myStudent.id : null;
+
+      const daySlots = localSlots.filter(s => s.dateIso === dateIso);
+      daySlots.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+      if (daySlots.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 30px 20px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; color: var(--text-muted);">
+            <div style="font-size: 32px; margin-bottom: 6px;">🏖️</div>
+            <p style="font-weight: 800; font-size: 15px; color: #fff;">Aucune séance programmée ce jour</p>
+            <p style="font-size: 12px; margin-top: 4px; line-height: 1.4;">Sélectionnez une autre date sur le calendrier ou passez en vue Liste pour voir toutes les dates disponibles.</p>
+            <button class="btn btn-outline" style="width: auto; margin-top: 12px; padding: 6px 14px; font-size: 12px;" onclick="switchViewMode('list')">
+              📋 Voir la liste complète
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      let html = "";
+      daySlots.forEach(slot => {
+        const slotBookings = localBookings.filter(b => b.slotId === slot.id);
+        const isBookedByMe = myStudentId && slotBookings.some(b => b.studentId === myStudentId);
+        const count = slotBookings.length;
+        const max = slot.maxCapacity || 4;
+        const isFull = count >= max;
+        const isVol = slot.lessonType.toUpperCase() === "VOL";
+
+        html += `
+          <div class="slot-item ${isBookedByMe ? 'booked-by-me' : ''}">
+            <div class="slot-header">
+              <div class="slot-type-badge ${isVol ? 'slot-type-vol' : 'slot-type-gonflage'}">
+                <span>${isVol ? '✈️' : '🪂'}</span>
+                <span>${isVol ? 'VOL' : 'GONFLAGE'}</span>
+              </div>
+              <div class="slot-time">🕒 ${slot.startTime} - ${slot.endTime}</div>
+            </div>
+
+            <div class="slot-details">
+              <div class="slot-detail-row">
+                <span>📍</span>
+                <span><b>${slot.location || 'Plouharnel (56)'}</b></span>
+              </div>
+              ${slot.notes ? `<div class="slot-detail-row" style="font-size: 12px; color: var(--text-dim);"><span>ℹ️</span> <i>${slot.notes}</i></div>` : ''}
+              
+              <div style="margin-top: 6px;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700;">
+                  <span style="color: ${isFull ? 'var(--warning-orange)' : 'var(--text-muted)'};">
+                    ${count} / ${max} place${max > 1 ? 's' : ''} ${isFull ? '(Complet)' : 'réservée' + (count > 1 ? 's' : '')}
+                  </span>
+                  ${isBookedByMe ? '<span style="color: var(--primary-light);">✅ Vous participez</span>' : ''}
+                </div>
+                <div class="capacity-bar-container">
+                  <div class="capacity-bar-fill ${isFull ? 'full' : ''}" style="width: ${Math.min(100, (count / max) * 100)}%;"></div>
+                </div>
+              </div>
+
+              ${slotBookings.length > 0 ? `
+                <div class="attendees-pills">
+                  ${slotBookings.map(b => {
+                    const st = localStudents.find(s => s.id === b.studentId);
+                    const name = st ? `${st.firstName} ${st.lastName ? st.lastName[0] + '.' : ''}` : 'Élève';
+                    const isMe = myStudentId && b.studentId === myStudentId;
+                    return `<span class="attendee-chip ${isMe ? 'is-me' : ''}">👤 ${name}</span>`;
+                  }).join('')}
+                </div>
+              ` : ''}
+            </div>
+
+            ${isBookedByMe ? `
+              <button class="btn btn-danger" onclick="handleUnenroll(${slot.id})">
+                <span>❌</span> Annuler mon inscription
+              </button>
+            ` : `
+              <button class="btn btn-primary" onclick="handleRegister(${slot.id})">
+                <span>${isFull ? '⏳' : '✍️'}</span> ${isFull ? 'M\'inscrire en Liste d\'attente' : 'Réserver ce créneau'}
+              </button>
+            `}
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
     function renderSlots() {
+      if (currentViewMode === "month") {
+        renderMonthCalendar();
+        return;
+      }
+
       const container = document.getElementById("slotsContainer");
       const p = getProfile();
       const cleanPhone = p.phone.replace(/[^0-9]/g, '');
@@ -1479,6 +2050,10 @@
       document.getElementById("navBtnPlanning").classList.toggle("active", tab === 'planning');
       document.getElementById("navBtnMyBookings").classList.toggle("active", tab === 'myBookings');
       document.getElementById("navBtnProfile").classList.toggle("active", tab === 'profile');
+
+      if (tab === 'planning' && currentViewMode === 'month') {
+        renderMonthCalendar();
+      }
     }
 
     function setFilter(f, btnEl) {
