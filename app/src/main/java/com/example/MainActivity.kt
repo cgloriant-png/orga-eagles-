@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
                 var showSyncSettingsDialog by remember { mutableStateOf(false) }
                 var showLicenseAdminDialog by remember { mutableStateOf(false) }
                 var showWebShareDialog by remember { mutableStateOf(false) }
+                var showClearConfirmDialog by remember { mutableStateOf(false) }
                 var dateForStandardDay by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
                 var datesForStandardDay by remember { mutableStateOf<List<String>>(emptyList()) }
                 var initialDateForSlotDialog by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
@@ -348,12 +349,12 @@ class MainActivity : ComponentActivity() {
                                                     leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
                                                 )
                                                 DropdownMenuItem(
-                                                    text = { Text("Générer semaine type & exemples") },
+                                                    text = { Text("Vider tous les créneaux & élèves", color = MaterialTheme.colorScheme.error) },
                                                     onClick = {
                                                         showTopOverflow = false
-                                                        viewModel.generateSampleData()
+                                                        showClearConfirmDialog = true
                                                     },
-                                                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF3B82F6)) }
+                                                    leadingIcon = { Icon(Icons.Default.DeleteSweep, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
                                                 )
                                                 DropdownMenuItem(
                                                     text = { Text("Changer le code PIN") },
@@ -971,6 +972,33 @@ class MainActivity : ComponentActivity() {
                     WebShareDialog(
                         schoolCode = schoolCode,
                         onDismiss = { showWebShareDialog = false }
+                    )
+                }
+
+                // Dialog: Clear All Data Confirmation
+                if (showClearConfirmDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showClearConfirmDialog = false },
+                        title = { Text("Vider tous les créneaux et élèves ?") },
+                        text = {
+                            Text("Cette action va supprimer tous les créneaux et élèves actuels (y compris les données d'exemples) et remettre le planning à zéro sur votre téléphone et sur la page web. Vous pourrez ensuite saisir directement vos vrais élèves et créneaux.")
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showClearConfirmDialog = false
+                                    viewModel.clearAllData()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Tout effacer", color = MaterialTheme.colorScheme.onError)
+                            }
+                        },
+                        dismissButton = {
+                            OutlinedButton(onClick = { showClearConfirmDialog = false }) {
+                                Text("Annuler")
+                            }
+                        }
                     )
                 }
             }

@@ -127,16 +127,12 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
         allProgress = repository.allProgress
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-        viewModelScope.launch {
-            repository.seedDefaultDataIfEmpty()
-        }
     }
 
-    fun generateSampleData() {
+    fun clearAllData() {
         viewModelScope.launch {
-            repository.seedDefaultDataIfEmpty(force = true)
-            _feedbackMessage.emit("Planning type et élèves exemples réinitialisés avec succès !")
+            repository.clearAllData()
+            _feedbackMessage.emit("Planning et liste d'élèves remis à zéro !")
         }
     }
 
