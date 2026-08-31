@@ -218,6 +218,66 @@ fun LicenseAdminDialog(
                             }
                         }
 
+                        // iPhone & Web access helper
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF0F172A),
+                            border = BorderStroke(1.dp, Color(0xFF1E293B)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("🍎 Élèves sur iPhone / Safari", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                                    Text("Accès direct sans installer d'APK", fontSize = 11.sp, color = Color(0xFF94A3B8))
+                                }
+                                Button(
+                                    onClick = {
+                                        val shareText = """
+🦅 *EAGLES ACADEMY - PLANNING ÉLÈVES*
+Accès iPhone & Web pour réserver vos créneaux de vol & gonflage :
+
+📲 https://paramoteur-eleves.web.app/#PLOUHARNEL
+
+💡 Sur iPhone : Ouvrir dans Safari ➔ Partager ➔ Sur l'écran d'accueil.
+Transmettez ensuite votre ID appareil affiché pour recevoir votre clé d'activation !
+                                        """.trimIndent()
+                                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                            action = Intent.ACTION_SEND
+                                            putExtra(Intent.EXTRA_TEXT, shareText)
+                                            type = "text/plain"
+                                            `package` = "com.whatsapp"
+                                        }
+                                        try {
+                                            context.startActivity(sendIntent)
+                                        } catch (e: Exception) {
+                                            val chooser = Intent.createChooser(
+                                                Intent(Intent.ACTION_SEND).apply {
+                                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                                    type = "text/plain"
+                                                },
+                                                "Partager via"
+                                            )
+                                            try { context.startActivity(chooser) } catch (_: Exception) {}
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text("💬", fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Partager", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(14.dp))
 
                         // Générateur
@@ -601,13 +661,14 @@ fun LicenseAdminDialog(
 
                                                 IconButton(
                                                     onClick = {
+                                                        LicenseManager.revokeDeviceAndKey(context, pilot.deviceId, pilot.generatedKey)
                                                         LicenseManager.deleteIssuedLicense(context, pilot.id)
                                                         issuedLicenses = LicenseManager.getIssuedLicenses(context)
-                                                        Toast.makeText(context, "Pilote retiré de la liste.", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "Accès révoqué et pilote retiré.", Toast.LENGTH_SHORT).show()
                                                     },
                                                     modifier = Modifier.size(32.dp)
                                                 ) {
-                                                    Icon(Icons.Default.DeleteOutline, contentDescription = "Supprimer", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+                                                    Icon(Icons.Default.Block, contentDescription = "Révoquer & Supprimer", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
                                                 }
                                             }
                                         }

@@ -88,6 +88,7 @@ class MainActivity : ComponentActivity() {
                 var showPinSettingsDialog by remember { mutableStateOf(false) }
                 var showSyncSettingsDialog by remember { mutableStateOf(false) }
                 var showLicenseAdminDialog by remember { mutableStateOf(false) }
+                var showWebShareDialog by remember { mutableStateOf(false) }
                 var dateForStandardDay by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
                 var datesForStandardDay by remember { mutableStateOf<List<String>>(emptyList()) }
                 var initialDateForSlotDialog by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date())) }
@@ -370,6 +371,14 @@ class MainActivity : ComponentActivity() {
                                                         openWhatsAppDirect(viewModel.generateSchoolShareText())
                                                     },
                                                     leadingIcon = { Text("💬", fontSize = 14.sp) }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Partager Accès iPhone / Web") },
+                                                    onClick = {
+                                                        showTopOverflow = false
+                                                        showWebShareDialog = true
+                                                    },
+                                                    leadingIcon = { Text("🍎", fontSize = 14.sp) }
                                                 )
                                             }
                                         }
@@ -946,6 +955,14 @@ class MainActivity : ComponentActivity() {
                         onStatusChanged = {
                             licenseStatus = LicenseManager.checkStatus(context)
                         }
+                    )
+                }
+
+                // Dialog: iPhone & Web Student Portal Share
+                if (showWebShareDialog) {
+                    WebShareDialog(
+                        schoolCode = schoolCode,
+                        onDismiss = { showWebShareDialog = false }
                     )
                 }
             }

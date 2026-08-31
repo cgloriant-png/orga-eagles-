@@ -17,6 +17,79 @@ object LicenseManager {
     private const val KEY_IS_MASTER = "is_master_developer"
     private const val KEY_INSTALL_UUID = "install_device_uuid"
     private const val KEY_PILOT_NAME = "pilot_name"
+    private const val KEY_REVOKED_DEVICES = "revoked_device_ids_set"
+    private const val KEY_REVOKED_KEYS = "revoked_keys_set"
+
+    fun isDeviceRevoked(context: Context, deviceId: String): Boolean {
+        val clean = deviceId.trim().uppercase(Locale.ROOT)
+        val revoked = getPrefs(context).getStringSet(KEY_REVOKED_DEVICES, emptySet()) ?: emptySet()
+        return clean in revoked
+    }
+
+    fun isKeyRevoked(context: Context, key: String): Boolean {
+        val clean = key.trim().uppercase(Locale.ROOT)
+        val revoked = getPrefs(context).getStringSet(KEY_REVOKED_KEYS, emptySet()) ?: emptySet()
+        return clean in revoked
+    }
+
+    fun revokeDeviceAndKey(context: Context, deviceId: String, key: String = "") {
+        val prefs = getPrefs(context)
+        val cleanDev = deviceId.trim().uppercase(Locale.ROOT)
+        val cleanKey = key.trim().uppercase(Locale.ROOT)
+
+        val devSet = prefs.getStringSet(KEY_REVOKED_DEVICES, emptySet())?.toMutableSet() ?: mutableSetOf()
+        if (cleanDev.isNotBlank()) devSet.add(cleanDev)
+
+        val keySet = prefs.getStringSet(KEY_REVOKED_KEYS, emptySet())?.toMutableSet() ?: mutableSetOf()
+        if (cleanKey.isNotBlank()) keySet.add(cleanKey)
+
+        prefs.edit()
+            .putStringSet(KEY_REVOKED_DEVICES, devSet)
+            .putStringSet(KEY_REVOKED_KEYS, keySet)
+            .apply()
+
+        // If local device was revoked, reset local activation
+        if (getDeviceId(context) == cleanDev) {
+            resetActivation(context)
+        }
+    }
+
+    fun unrevokeDevice(context: Context, deviceId: String) {
+        val prefs = getPrefs(context)
+        val cleanDev = deviceId.trim().uppercase(Locale.ROOT)
+        val devSet = prefs.getStringSet(KEY_REVOKED_DEVICES, emptySet())?.toMutableSet() ?: mutableSetOf()
+        devSet.remove(cleanDev)
+        prefs.edit().putStringSet(KEY_REVOKED_DEVICES, devSet).apply()
+    }
+
+    fun getRevokedDevices(context: Context): Set<String> {
+        return getPrefs(context).getStringSet(KEY_REVOKED_DEVICES, emptySet()) ?: emptySet()
+    }
+
+    fun getRevokedKeys(context: Context): Set<String> {
+        return getPrefs(context).getStringSet(KEY_REVOKED_KEYS, emptySet()) ?: emptySet()
+    }
+
+    fun mergeRemoteRevocations(context: Context, remoteRevokedDevs: Set<String>, remoteRevokedKeys: Set<String>) {
+        val prefs = getPrefs(context)
+        val devSet = prefs.getStringSet(KEY_REVOKED_DEVICES, emptySet())?.toMutableSet() ?: mutableSetOf()
+        devSet.addAll(remoteRevokedDevs.map { it.trim().uppercase(Locale.ROOT) })
+
+        val keySet = prefs.getStringSet(KEY_REVOKED_KEYS, emptySet())?.toMutableSet() ?: mutableSetOf()
+        keySet.addAll(remoteRevokedKeys.map { it.trim().uppercase(Locale.ROOT) })
+
+        prefs.edit()
+            .putStringSet(KEY_REVOKED_DEVICES, devSet)
+            .putStringSet(KEY_REVOKED_KEYS, keySet)
+            .apply()
+
+        // If this device was revoked remotely, lock it immediately
+        val myDevId = getDeviceId(context)
+        val myCurrentKey = prefs.getString(KEY_ACTIVATION_CODE, "") ?: ""
+        if (myDevId in devSet || myCurrentKey in keySet) {
+            resetActivation(context)
+        }
+    }
 
     // Secret salt strictly for signature generation (tamper-proof)
     private const val SECRET_SALT = "PARAMOTEUR_SECURE_SALT_COMP_2026_X99F"
@@ -98,9 +171,22 @@ object LicenseManager {
             )
         }
 
+        val myDevId = getDeviceId(context)
         val code = prefs.getString(KEY_ACTIVATION_CODE, null)
         val expiryMs = prefs.getLong(KEY_ACTIVATION_EXPIRY, 0L)
         val pilotName = prefs.getString(KEY_PILOT_NAME, "") ?: ""
+
+        // Check if device or code is in revocation list
+        if (isDeviceRevoked(context, myDevId) || (code != null && isKeyRevoked(context, code))) {
+            return LicenseStatus(
+                isActivated = false,
+                isMasterDeveloper = false,
+                expiryDateMs = 0L,
+                daysRemaining = 0,
+                pilotName = pilotName,
+                licenseTypeLabel = "Accès révoqué par le moniteur"
+            )
+        }
 
         if (code.isNullOrBlank() || expiryMs <= 0L) {
             return LicenseStatus(

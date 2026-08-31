@@ -349,6 +349,21 @@ class CloudSyncManager(
         val deletedSlotsArray = remoteJson.optJSONArray("deletedSlotIds") ?: JSONArray()
         val deletedBookingsArray = remoteJson.optJSONArray("deletedBookingIds") ?: JSONArray()
         val deletedStudentsArray = remoteJson.optJSONArray("deletedStudentIds") ?: JSONArray()
+        val revokedDevicesArray = remoteJson.optJSONArray("revokedDevices") ?: JSONArray()
+        val revokedKeysArray = remoteJson.optJSONArray("revokedKeys") ?: JSONArray()
+
+        val remoteRevokedDevices = mutableSetOf<String>()
+        for (i in 0 until revokedDevicesArray.length()) {
+            remoteRevokedDevices.add(revokedDevicesArray.getString(i))
+        }
+        val remoteRevokedKeys = mutableSetOf<String>()
+        for (i in 0 until revokedKeysArray.length()) {
+            remoteRevokedKeys.add(revokedKeysArray.getString(i))
+        }
+
+        if (remoteRevokedDevices.isNotEmpty() || remoteRevokedKeys.isNotEmpty()) {
+            com.example.util.LicenseManager.mergeRemoteRevocations(context, remoteRevokedDevices, remoteRevokedKeys)
+        }
 
         val remoteDeletedSlotIds = mutableSetOf<Long>()
         for (i in 0 until deletedSlotsArray.length()) {
@@ -643,6 +658,12 @@ class CloudSyncManager(
             val deletedStudentsJson = JSONArray()
             deletedStudentIds.forEach { deletedStudentsJson.put(it) }
 
+            val revokedDevicesJson = JSONArray()
+            com.example.util.LicenseManager.getRevokedDevices(context).forEach { revokedDevicesJson.put(it) }
+
+            val revokedKeysJson = JSONArray()
+            com.example.util.LicenseManager.getRevokedKeys(context).forEach { revokedKeysJson.put(it) }
+
             val payload = JSONObject()
             payload.put("version", 6)
             payload.put("schoolCode", _schoolCode.value)
@@ -655,6 +676,8 @@ class CloudSyncManager(
             payload.put("deletedSlotIds", deletedSlotsJson)
             payload.put("deletedBookingIds", deletedBookingsJson)
             payload.put("deletedStudentIds", deletedStudentsJson)
+            payload.put("revokedDevices", revokedDevicesJson)
+            payload.put("revokedKeys", revokedKeysJson)
 
             val payloadString = payload.toString()
             val compressed = compressPayload(payloadString)

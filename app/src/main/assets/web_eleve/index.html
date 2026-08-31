@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Eagles Academy • Espace Élèves</title>
+  
+  <!-- iOS PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Eagles Paramoteur">
+  <meta name="theme-color" content="#0b1329">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #070d1e;
+      --bg-card: #0f1a36;
+      --bg-surface: #172447;
+      --bg-inner: #0a1226;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --border-focus: #0284c7;
+      --primary: #0284c7;
+      --primary-light: #38bdf8;
+      --primary-dark: #0369a1;
+      --vol-blue: #0284c7;
+      --vol-bg: rgba(2, 132, 199, 0.15);
+      --gonflage-green: #059669;
+      --gonflage-bg: rgba(5, 150, 105, 0.15);
+      --danger-red: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.15);
+      --warning-orange: #f59e0b;
+      --warning-bg: rgba(245, 158, 11, 0.15);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    input, textarea {
+      user-select: text;
+    }
+
+    body {
+      font-family: var(--font-main);
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding-top: var(--safe-top);
+      padding-bottom: calc(var(--safe-bottom) + 70px);
+      overflow-x: hidden;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(11, 19, 41, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      color: #fff;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary-light);
+    }
+
+    .sync-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .sync-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--gonflage-green);
+      box-shadow: 0 0 8px var(--gonflage-green);
+    }
+
+    .sync-dot.offline {
+      background-color: var(--danger-red);
+      box-shadow: 0 0 8px var(--danger-red);
+    }
+
+    .sync-dot.syncing {
+      background-color: var(--warning-orange);
+      box-shadow: 0 0 8px var(--warning-orange);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    /* iOS Install Helper Banner */
+    .ios-banner {
+      background: linear-gradient(90deg, #1e293b, #0f172a);
+      border-bottom: 1px solid rgba(2, 132, 199, 0.3);
+      padding: 8px 14px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #e2e8f0;
+    }
+
+    .ios-banner span b {
+      color: var(--primary-light);
+    }
+
+    .ios-banner-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 16px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    /* Main Container */
+    main {
+      padding: 14px;
+      max-width: 650px;
+      width: 100%;
+      margin: 0 auto;
+      flex: 1;
+    }
+
+    /* Section Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Date Filter Pills */
+    .filters-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 14px;
+      scrollbar-width: none;
+    }
+
+    .filters-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter-pill {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-pill.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary-light);
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+    }
+
+    /* Slot Card Styling */
+    .slot-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+
+    .slot-item.booked-by-me {
+      border: 1.5px solid var(--primary-light);
+      background: linear-gradient(180deg, rgba(2, 132, 199, 0.08), var(--bg-card));
+    }
+
+    .slot-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .slot-type-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+    }
+
+    .slot-type-vol {
+      background: var(--vol-bg);
+      color: var(--primary-light);
+      border: 1px solid rgba(2, 132, 199, 0.3);
+    }
+
+    .slot-type-gonflage {
+      background: var(--gonflage-bg);
+      color: #34d399;
+      border: 1px solid rgba(5, 150, 105, 0.3);
+    }
+
+    .slot-time {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .slot-details {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .slot-detail-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .capacity-bar-container {
+      background: var(--bg-inner);
+      border-radius: 6px;
+      height: 8px;
+      overflow: hidden;
+      margin-top: 4px;
+      border: 1px solid var(--border-color);
+    }
+
+    .capacity-bar-fill {
+      height: 100%;
+      background: var(--primary);
+      transition: width 0.3s;
+    }
+
+    .capacity-bar-fill.full {
+      background: var(--warning-orange);
+    }
+
+    .attendees-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .attendee-chip {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: var(--text-main);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .attendee-chip.is-me {
+      background: var(--vol-bg);
+      border-color: var(--primary-light);
+      color: var(--primary-light);
+      font-weight: 700;
+    }
+
+    /* Action Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-family: var(--font-main);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3);
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+      background: var(--primary-dark);
+    }
+
+    .btn-danger {
+      background: var(--danger-bg);
+      color: var(--danger-red);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-danger:active {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    .btn-whatsapp {
+      background: #16a34a;
+      color: #fff;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+
+    /* Activation Overlay / Screen */
+    #activation-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: var(--bg-dark);
+      padding: 24px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      overflow-y: auto;
+    }
+
+    .activation-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 24px 20px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    .device-id-box {
+      background: var(--bg-inner);
+      border: 1.5px dashed var(--primary);
+      border-radius: 12px;
+      padding: 14px;
+      margin: 16px 0;
+    }
+
+    .device-id-text {
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--primary-light);
+      letter-spacing: 2px;
+    }
+
+    .input-code {
+      width: 100%;
+      background: var(--bg-inner);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .input-code:focus {
+      outline: none;
+      border-color: var(--primary-light);
+      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2);
+    }
+
+    /* Bottom Navigation Bar */
+    nav.bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 40;
+      background: rgba(11, 19, 41, 0.95);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-around;
+      padding: 8px 10px calc(var(--safe-bottom) + 8px);
+    }
+
+    .nav-tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 4px 12px;
+      border-radius: 10px;
+      transition: all 0.2s;
+    }
+
+    .nav-tab.active {
+      color: var(--primary-light);
+    }
+
+    .nav-tab .tab-icon {
+      font-size: 20px;
+    }
+
+    /* Modal dialog */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 20px;
+      max-width: 440px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    /* Toast notification */
+    #toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #0f172a;
+      color: #fff;
+      border: 1px solid var(--border-color);
+      padding: 10px 18px;
+      border-radius: 24px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      z-index: 200;
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- iOS Install Banner -->
+  <div class="ios-banner" id="iosBanner">
+    <span>💡 <b>Sur iPhone</b> : appuyez sur <b>Partager <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></b> puis <b>« Sur l'écran d'accueil »</b>.</span>
+    <button class="ios-banner-close" onclick="document.getElementById('iosBanner').style.display='none'">✕</button>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="brand-group" onclick="handleSecretDevTap()">
+      <div class="brand-icon">🦅</div>
+      <div>
+        <div class="brand-title">Eagles Academy</div>
+        <div class="brand-subtitle" id="schoolSubtitle">Plouharnel (56) • École Élèves</div>
+      </div>
+    </div>
+    <div class="sync-badge" onclick="triggerManualSync()">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncText">En direct</span>
+    </div>
+  </header>
+
+  <!-- Main Content Areas -->
+  <main id="mainContainer">
+
+    <!-- TAB 1: PLANNING & RESERVATIONS -->
+    <div id="tabPlanning">
+      <!-- Date Filters -->
+      <div class="filters-row">
+        <button class="filter-pill active" onclick="setFilter('TOUS')">Tous les créneaux</button>
+        <button class="filter-pill" onclick="setFilter('TODAY')">Aujourd'hui</button>
+        <button class="filter-pill" onclick="setFilter('TOMORROW')">Demain</button>
+        <button class="filter-pill" onclick="setFilter('WEEK')">Cette semaine</button>
+        <button class="filter-pill" onclick="setFilter('VOL')">✈️ Vols seuls</button>
+        <button class="filter-pill" onclick="setFilter('GONFLAGE')">🪂 Gonflages</button>
+      </div>
+
+      <!-- Weather alert banner if any -->
+      <div id="weatherAlertBanner" style="display: none; margin-bottom: 12px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 10px 14px; font-size: 13px; color: #fca5a5;"></div>
+
+      <!-- Slots List Container -->
+      <div id="slotsContainer">
+        <div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+          <div style="font-size: 32px; margin-bottom: 10px;">⏳</div>
+          <p>Chargement des créneaux de vol & gonflage...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: MES INSCRIPTIONS -->
+    <div id="tabMyBookings" style="display: none;">
+      <div class="card">
+        <h3 style="font-size: 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+          <span>📋</span> Mes Réservations Confirmées
+        </h3>
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">
+          Retrouvez tous vos créneaux réservés et exportez-les directement vers le calendrier de votre iPhone / téléphone.
+        </p>
+        <div id="myBookingsList"></div>
+      </div>
+    </div>
+
+    <!-- TAB 3: MON PROFIL & LIVRET -->
+    <div id="tabProfile" style="display: none;">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="font-size: 16px; display: flex; align-items: center; gap: 8px;">
+            <span>👤</span> Mon Profil Élève
+          </h3>
+          <button class="btn btn-outline" style="width: auto; padding: 4px 10px; font-size: 11px;" onclick="openProfileModal()">Modifier</button>
+        </div>
+        <div id="profileDisplay" style="font-size: 13px; line-height: 1.6; color: var(--text-muted);"></div>
+      </div>
+
+      <!-- Livret de progression -->
+      <div class="card">
+        <h3 style="font-size: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          <span>🎯</span> Livret de Progression
+        </h3>
+        <div id="progressDisplay">
+          <p style="font-size: 12px; color: var(--text-muted);">Vos compétences et heures de vol validées par le moniteur apparaîtront ici dès synchronisation.</p>
+        </div>
+      </div>
+
+      <!-- App & Security info -->
+      <div class="card" style="font-size: 12px; color: var(--text-dim);">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+          <span>ID Appareil :</span>
+          <span id="profileDeviceId" style="font-family: var(--font-mono); color: var(--primary-light);"></span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+          <span>Validité Clé :</span>
+          <span id="profileLicenseStatus" style="color: #34d399; font-weight: 600;"></span>
+        </div>
+        <button class="btn btn-outline" style="font-size: 12px; padding: 8px;" onclick="handleDeactivate()">Verrouiller / Changer de clé</button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav">
+    <button class="nav-tab active" id="navBtnPlanning" onclick="switchTab('planning')">
+      <span class="tab-icon">📅</span>
+      <span>Planning</span>
+    </button>
+    <button class="nav-tab" id="navBtnMyBookings" onclick="switchTab('myBookings')">
+      <span class="tab-icon">📋</span>
+      <span>Mes Séances</span>
+    </button>
+    <button class="nav-tab" id="navBtnProfile" onclick="switchTab('profile')">
+      <span class="tab-icon">👤</span>
+      <span>Mon Profil</span>
+    </button>
+  </nav>
+
+  <!-- Profile Modal Dialog -->
+  <div class="modal-backdrop" id="profileModal" style="display: none;">
+    <div class="modal-content">
+      <h3 style="font-size: 17px; font-weight: 800; margin-bottom: 6px;">👤 Vos Coordonnées Élève</h3>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Ces informations permettent au moniteur de vous identifier lors de vos réservations.</p>
+      
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">PRÉNOM *</label>
+        <input type="text" id="inputFirstName" class="input-code" style="text-align: left; text-transform: capitalize;" placeholder="Ex: Lucas">
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">NOM *</label>
+        <input type="text" id="inputLastName" class="input-code" style="text-align: left; text-transform: uppercase;" placeholder="Ex: DUPONT">
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">NUMÉRO DE TÉLÉPHONE *</label>
+        <input type="tel" id="inputPhone" class="input-code" style="text-align: left; text-transform: none;" placeholder="Ex: 06 12 34 56 78">
+      </div>
+
+      <div style="margin-bottom: 18px;">
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">NIVEAU ACTUEL</label>
+        <select id="selectLevel" class="input-code" style="text-align: left; text-transform: none; cursor: pointer;">
+          <option value="Initiation">Initiation / Découverte</option>
+          <option value="Gonflage">Gonflage & Pente École</option>
+          <option value="Grands Vols">Grands Vols en solo</option>
+          <option value="Perfectionnement">Perfectionnement / Brevet Pilote</option>
+          <option value="Emport Passager">Emport Passager</option>
+        </select>
+      </div>
+
+      <button class="btn btn-primary" onclick="saveProfileFromModal()">Enregistrer mon profil</button>
+    </div>
+  </div>
+
+  <!-- ACTIVATION LOCK OVERLAY -->
+  <div id="activation-screen" style="display: none;">
+    <div class="activation-card">
+      <div style="font-size: 42px; margin-bottom: 8px;">🔐</div>
+      <h2 style="font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 6px;">Activation Élève</h2>
+      <p style="font-size: 13px; color: var(--text-muted); line-height: 1.4;">
+        Cette application est réservée aux élèves de l'école de paramoteur. Pour déverrouiller l'accès, transmettez votre identifiant d'appareil à votre moniteur.
+      </p>
+
+      <div class="device-id-box">
+        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">VOTRE ID APPAREIL UNIQUE :</div>
+        <div class="device-id-text" id="activationDeviceId">PM-XXXX-XXXX</div>
+      </div>
+
+      <button class="btn btn-whatsapp" style="margin-bottom: 12px;" onclick="sendIdToInstructorWhatsApp()">
+        <span>💬</span> Envoyer mon ID par WhatsApp
+      </button>
+
+      <button class="btn btn-outline" style="margin-bottom: 20px;" onclick="copyDeviceId()">
+        <span>📋</span> Copier mon ID
+      </button>
+
+      <div style="border-top: 1px solid var(--border-color); padding-top: 16px; text-align: left;">
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 6px;">
+          SAISIR LA CLÉ D'ACTIVATION FOURNIE :
+        </label>
+        <input type="text" id="inputActivationKey" class="input-code" placeholder="ACT-30D-XXXX-XXXXXXXX" autocomplete="off" autocorrect="off" autocapitalize="characters">
+        
+        <button class="btn btn-primary" onclick="handleActivateWithKey()">
+          ⚡ Activer mon accès
+        </button>
+      </div>
+
+      <div id="activationError" style="margin-top: 12px; font-size: 12px; color: var(--danger-red); font-weight: 600; display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Toast Notification element -->
+  <div id="toast"></div>
+
+  <!-- Main Logic & Sync Script -->
+  <script>
+    const SECRET_SALT = "PARAMOTEUR_SECURE_SALT_COMP_2026_X99F";
+    const MASTER_CODES = ["PARAMASTER2026", "DEV-UNLOCK-MASTER", "PARAMOTEUR-SUPER-ADMIN"];
+    let schoolCode = "PLOUHARNEL";
+    let myDeviceId = "";
+    let isActivated = false;
+    let localSlots = [];
+    let localStudents = [];
+    let localBookings = [];
+    let localProgress = [];
+    let currentFilter = "TOUS";
+    let secretTapCount = 0;
+    let sseEventSource = null;
+
+    // Toast helper
+    function showToast(msg, icon = "✅") {
+      const toast = document.getElementById("toast");
+      toast.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 3000);
+    }
+
+    // SHA-256 in browser
+    async function sha256(str) {
+      const buf = new TextEncoder().encode(str);
+      const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+      return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Initialize Device ID
+    async function initDeviceId() {
+      let rawUuid = localStorage.getItem("eagles_device_uuid");
+      if (!rawUuid) {
+        rawUuid = 'web_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now().toString(36);
+        localStorage.setItem("eagles_device_uuid", rawUuid);
+      }
+      const hash = await sha256(rawUuid + "-" + SECRET_SALT);
+      const part1 = hash.substring(0, 4).toUpperCase();
+      const part2 = hash.substring(4, 8).toUpperCase();
+      myDeviceId = "PM-" + part1 + "-" + part2;
+      document.getElementById("activationDeviceId").innerText = myDeviceId;
+      document.getElementById("profileDeviceId").innerText = myDeviceId;
+    }
+
+    // Key verification matching Kotlin LicenseManager
+    async function verifyLicenseKey(devId, keyStr) {
+      const cleanDev = devId.trim().toUpperCase();
+      const cleanKey = keyStr.trim().toUpperCase();
+      
+      if (MASTER_CODES.includes(cleanKey)) {
+        return { isValid: true, expiryMs: Number.MAX_SAFE_INTEGER, isMaster: true };
+      }
+
+      const parts = cleanKey.split("-");
+      if (parts.length !== 4 || parts[0] !== "ACT") {
+        return { isValid: false, error: "Format invalide (doit commencer par ACT-)" };
+      }
+
+      const durationCode = parts[1];
+      const expiryHex = parts[2];
+      const providedSig = parts[3];
+
+      const expiryDays = parseInt(expiryHex, 16);
+      if (isNaN(expiryDays)) {
+        return { isValid: false, error: "Date d'expiration invalide dans la clé" };
+      }
+
+      const expiryMs = expiryDays * 24 * 60 * 60 * 1000;
+      if (Date.now() > expiryMs) {
+        return { isValid: false, error: "Cette clé a expiré" };
+      }
+
+      const raw = `${cleanDev}:${durationCode}:${expiryHex}:${SECRET_SALT}`;
+      const hash = await sha256(raw);
+      const expectedSig = hash.substring(0, 8).toUpperCase();
+
+      if (providedSig !== expectedSig) {
+        return { isValid: false, error: "Clé non valide pour cet appareil (" + cleanDev + ")" };
+      }
+
+      return { isValid: true, expiryMs: expiryMs, isMaster: false };
+    }
+
+    // Check activation status
+    async function checkActivation() {
+      const savedCode = localStorage.getItem("eagles_license_code");
+      const savedExpiry = parseInt(localStorage.getItem("eagles_license_expiry") || "0", 10);
+      const isMaster = localStorage.getItem("eagles_is_master") === "true";
+
+      // Check if this device is in local revoked cache
+      const revokedList = JSON.parse(localStorage.getItem("eagles_revoked_devs") || "[]");
+      if (revokedList.includes(myDeviceId)) {
+        lockApp("Accès révoqué par le moniteur");
+        return;
+      }
+
+      if (isMaster) {
+        unlockApp("Accès Master Développeur");
+        return;
+      }
+
+      if (!savedCode || !savedExpiry || Date.now() > savedExpiry) {
+        lockApp(savedCode ? "Licence expirée" : "");
+        return;
+      }
+
+      // Re-verify signature
+      const res = await verifyLicenseKey(myDeviceId, savedCode);
+      if (!res.isValid) {
+        lockApp(res.error);
+      } else {
+        const daysLeft = Math.ceil((savedExpiry - Date.now()) / (1000 * 60 * 60 * 24));
+        unlockApp(`Active (${daysLeft}j restants)`);
+      }
+    }
+
+    function lockApp(reason = "") {
+      isActivated = false;
+      document.getElementById("activation-screen").style.display = "flex";
+      if (reason) {
+        const err = document.getElementById("activationError");
+        err.innerText = reason;
+        err.style.display = "block";
+      }
+    }
+
+    function unlockApp(statusLabel = "Active") {
+      isActivated = true;
+      document.getElementById("activation-screen").style.display = "none";
+      document.getElementById("profileLicenseStatus").innerText = statusLabel;
+    }
+
+    async function handleActivateWithKey() {
+      const key = document.getElementById("inputActivationKey").value.trim().toUpperCase();
+      if (!key) {
+        showToast("Veuillez saisir votre clé", "⚠️");
+        return;
+      }
+
+      const res = await verifyLicenseKey(myDeviceId, key);
+      if (res.isValid) {
+        localStorage.setItem("eagles_license_code", key);
+        localStorage.setItem("eagles_license_expiry", res.expiryMs.toString());
+        localStorage.setItem("eagles_is_master", res.isMaster ? "true" : "false");
+        unlockApp(res.isMaster ? "Master" : "Licence Active");
+        showToast("Application activée avec succès !");
+        
+        // Open profile modal if not configured
+        if (!getProfile().firstName) {
+          openProfileModal();
+        }
+      } else {
+        const err = document.getElementById("activationError");
+        err.innerText = res.error || "Clé invalide";
+        err.style.display = "block";
+      }
+    }
+
+    function handleDeactivate() {
+      if (confirm("Voulez-vous vraiment reverrouiller cette application ?")) {
+        localStorage.removeItem("eagles_license_code");
+        localStorage.removeItem("eagles_license_expiry");
+        localStorage.removeItem("eagles_is_master");
+        lockApp();
+        showToast("Application reverrouillée");
+      }
+    }
+
+    function copyDeviceId() {
+      navigator.clipboard.writeText(myDeviceId).then(() => {
+        showToast("ID Appareil copié !");
+      });
+    }
+
+    function sendIdToInstructorWhatsApp() {
+      const text = encodeURIComponent(`Bonjour, voici mon ID appareil pour activer mon accès Eagles Academy Paramoteur :\n\n👉 ${myDeviceId}\n\nMerci !`);
+      window.open(`https://wa.me/?text=${text}`, '_blank');
+    }
+
+    // Profile Management
+    function getProfile() {
+      return {
+        firstName: localStorage.getItem("eagles_profile_first") || "",
+        lastName: localStorage.getItem("eagles_profile_last") || "",
+        phone: localStorage.getItem("eagles_profile_phone") || "",
+        level: localStorage.getItem("eagles_profile_level") || "Gonflage"
+      };
+    }
+
+    function saveProfileFromModal() {
+      const first = document.getElementById("inputFirstName").value.trim();
+      const last = document.getElementById("inputLastName").value.trim();
+      const phone = document.getElementById("inputPhone").value.trim();
+      const level = document.getElementById("selectLevel").value;
+
+      if (!first || !phone) {
+        showToast("Prénom et Téléphone obligatoires", "⚠️");
+        return;
+      }
+
+      localStorage.setItem("eagles_profile_first", first);
+      localStorage.setItem("eagles_profile_last", last);
+      localStorage.setItem("eagles_profile_phone", phone);
+      localStorage.setItem("eagles_profile_level", level);
+
+      document.getElementById("profileModal").style.display = "none";
+      showToast("Profil enregistré !");
+      renderProfile();
+      renderSlots();
+    }
+
+    function openProfileModal() {
+      const p = getProfile();
+      document.getElementById("inputFirstName").value = p.firstName;
+      document.getElementById("inputLastName").value = p.lastName;
+      document.getElementById("inputPhone").value = p.phone;
+      document.getElementById("selectLevel").value = p.level;
+      document.getElementById("profileModal").style.display = "flex";
+    }
+
+    function renderProfile() {
+      const p = getProfile();
+      const disp = document.getElementById("profileDisplay");
+      if (!p.firstName) {
+        disp.innerHTML = `<p style="color: var(--warning-orange);">⚠️ Profil non renseigné. Cliquez sur "Modifier" pour vous identifier.</p>`;
+      } else {
+        disp.innerHTML = `
+          <div style="color: #fff; font-weight: 700; font-size: 15px; margin-bottom: 4px;">${p.firstName} ${p.lastName}</div>
+          <div>📞 <b>Téléphone :</b> ${p.phone}</div>
+          <div>🪂 <b>Niveau :</b> ${p.level}</div>
+        `;
+      }
+    }
+
+    // CLOUD REALTIME SYNC (ntfy.sh Server-Sent Events + HTTP POST)
+    function getNtfyTopic() {
+      const clean = schoolCode.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+      return clean ? `paramoteur_${clean}_v6` : 'paramoteur_plouharnel_v6';
+    }
+
+    function startRealtimeSync() {
+      const topic = getNtfyTopic();
+      const sseUrl = `https://ntfy.sh/${topic}/sse`;
+
+      if (sseEventSource) {
+        sseEventSource.close();
+      }
+
+      updateSyncStatus("syncing", "Connexion...");
+
+      sseEventSource = new EventSource(sseUrl);
+
+      sseEventSource.onopen = () => {
+        updateSyncStatus("online", "En direct");
+        pollFullSnapshot();
+      };
+
+      sseEventSource.onmessage = (event) => {
+        try {
+          const ntfyData = JSON.parse(event.data);
+          if (ntfyData.event === "message" && ntfyData.message) {
+            handleIncomingSnapshot(ntfyData.message);
+          }
+        } catch (e) {
+          console.error("SSE parse error", e);
+        }
+      };
+
+      sseEventSource.onerror = () => {
+        updateSyncStatus("offline", "Reconnexion...");
+        setTimeout(() => pollFullSnapshot(), 3000);
+      };
+
+      // Periodic polling backup every 5s
+      setInterval(() => {
+        pollFullSnapshot();
+      }, 5000);
+    }
+
+    function updateSyncStatus(state, label) {
+      const dot = document.getElementById("syncDot");
+      const text = document.getElementById("syncText");
+      dot.className = "sync-dot " + (state === "online" ? "" : state);
+      text.innerText = label;
+    }
+
+    async function pollFullSnapshot() {
+      try {
+        const topic = getNtfyTopic();
+        const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1&since=all`);
+        if (!res.ok) return;
+        const text = await res.text();
+        const lines = text.trim().split("\n").filter(l => l.trim().length > 0);
+        
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try {
+            const msgObj = JSON.parse(lines[i]);
+            if (msgObj.message && msgObj.message.includes('"slots"')) {
+              handleIncomingSnapshot(msgObj.message);
+              break;
+            }
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.warn("Poll error", err);
+      }
+    }
+
+    function handleIncomingSnapshot(rawJson) {
+      try {
+        const snapshot = JSON.parse(rawJson);
+        if (!snapshot.slots) return;
+
+        // Check remote revocations
+        if (snapshot.revokedDevices && Array.isArray(snapshot.revokedDevices)) {
+          localStorage.setItem("eagles_revoked_devs", JSON.stringify(snapshot.revokedDevices));
+          if (snapshot.revokedDevices.includes(myDeviceId)) {
+            lockApp("Accès révoqué par le moniteur");
+            return;
+          }
+        }
+
+        localSlots = snapshot.slots || [];
+        localStudents = snapshot.students || [];
+        localBookings = snapshot.bookings || [];
+        localProgress = snapshot.progress || [];
+
+        // Save local cache
+        localStorage.setItem("eagles_cache_slots", JSON.stringify(localSlots));
+        localStorage.setItem("eagles_cache_bookings", JSON.stringify(localBookings));
+        localStorage.setItem("eagles_cache_students", JSON.stringify(localStudents));
+        localStorage.setItem("eagles_cache_progress", JSON.stringify(localProgress));
+
+        updateSyncStatus("online", "En direct");
+        renderSlots();
+        renderMyBookings();
+        renderProgress();
+      } catch (e) {
+        console.error("handleIncomingSnapshot error", e);
+      }
+    }
+
+    async function pushBookingUpdate() {
+      try {
+        updateSyncStatus("syncing", "Envoi...");
+        const topic = getNtfyTopic();
+        const payload = {
+          version: 6,
+          schoolCode: schoolCode,
+          senderId: myDeviceId,
+          lastUpdated: Date.now(),
+          slots: localSlots,
+          students: localStudents,
+          bookings: localBookings,
+          progress: localProgress,
+          deletedSlotIds: [],
+          deletedBookingIds: [],
+          deletedStudentIds: []
+        };
+
+        await fetch(`https://ntfy.sh/${topic}`, {
+          method: "POST",
+          headers: {
+            "Title": "ParamoteurSync",
+            "Priority": "high",
+            "Tags": "cloud,sync"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        updateSyncStatus("online", "En direct");
+      } catch (e) {
+        console.error("Push booking error", e);
+        updateSyncStatus("offline", "Erreur envoi");
+      }
+    }
+
+    // Booking actions
+    function handleRegister(slotId) {
+      const p = getProfile();
+      if (!p.firstName || !p.phone) {
+        openProfileModal();
+        showToast("Veuillez renseigner votre profil pour réserver", "ℹ️");
+        return;
+      }
+
+      // Find or create student in localStudents
+      let st = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
+      if (!st) {
+        st = {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          firstName: p.firstName,
+          lastName: p.lastName,
+          phone: p.phone,
+          email: "",
+          level: p.level,
+          notes: "",
+          completedSessions: 0,
+          createdAt: Date.now()
+        };
+        localStudents.push(st);
+      }
+
+      // Check if already booked
+      const existing = localBookings.find(b => b.slotId === slotId && b.studentId === st.id);
+      if (existing) {
+        showToast("Vous êtes déjà inscrit à ce créneau !", "ℹ️");
+        return;
+      }
+
+      // Check capacity
+      const slot = localSlots.find(s => s.id === slotId);
+      const currentCount = localBookings.filter(b => b.slotId === slotId).length;
+      const isWaitlist = slot && currentCount >= slot.maxCapacity;
+
+      const newBooking = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        slotId: slotId,
+        studentId: st.id,
+        registeredAt: Date.now(),
+        isWaitingList: isWaitlist,
+        attended: false
+      };
+
+      localBookings.push(newBooking);
+      renderSlots();
+      renderMyBookings();
+      pushBookingUpdate();
+
+      showToast(isWaitlist ? "Ajouté sur Liste d'Attente !" : "Inscription confirmée avec succès ! 🎉");
+    }
+
+    function handleUnenroll(slotId) {
+      const p = getProfile();
+      const st = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
+      if (!st) return;
+
+      if (confirm("Voulez-vous vraiment annuler votre inscription à ce créneau ?")) {
+        localBookings = localBookings.filter(b => !(b.slotId === slotId && b.studentId === st.id));
+        renderSlots();
+        renderMyBookings();
+        pushBookingUpdate();
+        showToast("Inscription annulée.");
+      }
+    }
+
+    // Render Slots List
+    function renderSlots() {
+      const container = document.getElementById("slotsContainer");
+      const p = getProfile();
+      const myStudent = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
+      const myStudentId = myStudent ? myStudent.id : null;
+
+      // Filter slots
+      let filtered = [...localSlots];
+      
+      const todayIso = new Date().toISOString().split('T')[0];
+      const tomDate = new Date();
+      tomDate.setDate(tomDate.getDate() + 1);
+      const tomorrowIso = tomDate.toISOString().split('T')[0];
+
+      if (currentFilter === "TODAY") {
+        filtered = filtered.filter(s => s.dateIso === todayIso);
+      } else if (currentFilter === "TOMORROW") {
+        filtered = filtered.filter(s => s.dateIso === tomorrowIso);
+      } else if (currentFilter === "VOL") {
+        filtered = filtered.filter(s => s.lessonType.toUpperCase() === "VOL");
+      } else if (currentFilter === "GONFLAGE") {
+        filtered = filtered.filter(s => s.lessonType.toUpperCase() === "GONFLAGE");
+      }
+
+      // Sort by date then startTime
+      filtered.sort((a, b) => (a.dateIso + a.startTime).localeCompare(b.dateIso + b.startTime));
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+            <div style="font-size: 32px; margin-bottom: 8px;">📅</div>
+            <p style="font-weight: 700; color: #fff;">Aucun créneau correspondant</p>
+            <p style="font-size: 12px; margin-top: 4px;">Le moniteur ajoutera bientôt les prochaines sessions.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = "";
+      let currentDateGroup = "";
+
+      filtered.forEach(slot => {
+        if (slot.dateIso !== currentDateGroup) {
+          currentDateGroup = slot.dateIso;
+          html += `
+            <div style="font-size: 13px; font-weight: 800; color: var(--primary-light); margin: 16px 0 8px 4px; display: flex; align-items: center; gap: 6px;">
+              <span>🗓️</span> ${formatFrenchDate(slot.dateIso)}
+            </div>
+          `;
+        }
+
+        const slotBookings = localBookings.filter(b => b.slotId === slot.id);
+        const isBookedByMe = myStudentId && slotBookings.some(b => b.studentId === myStudentId);
+        const count = slotBookings.length;
+        const max = slot.maxCapacity || 4;
+        const isFull = count >= max;
+        const isVol = slot.lessonType.toUpperCase() === "VOL";
+
+        html += `
+          <div class="slot-item ${isBookedByMe ? 'booked-by-me' : ''}">
+            <div class="slot-header">
+              <div class="slot-type-badge ${isVol ? 'slot-type-vol' : 'slot-type-gonflage'}">
+                <span>${isVol ? '✈️' : '🪂'}</span>
+                <span>${isVol ? 'VOL' : 'GONFLAGE'}</span>
+              </div>
+              <div class="slot-time">🕒 ${slot.startTime} - ${slot.endTime}</div>
+            </div>
+
+            <div class="slot-details">
+              <div class="slot-detail-row">
+                <span>📍</span>
+                <span><b>${slot.location || 'Plouharnel (56)'}</b></span>
+              </div>
+              ${slot.notes ? `<div class="slot-detail-row" style="font-size: 12px; color: var(--text-dim);"><span>ℹ️</span> <i>${slot.notes}</i></div>` : ''}
+              
+              <!-- Capacity bar -->
+              <div style="margin-top: 6px;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700;">
+                  <span style="color: ${isFull ? 'var(--warning-orange)' : 'var(--text-muted)'};">
+                    ${count} / ${max} place${max > 1 ? 's' : ''} ${isFull ? '(Complet)' : 'réservée' + (count > 1 ? 's' : '')}
+                  </span>
+                  ${isBookedByMe ? '<span style="color: var(--primary-light);">✅ Vous participez</span>' : ''}
+                </div>
+                <div class="capacity-bar-container">
+                  <div class="capacity-bar-fill ${isFull ? 'full' : ''}" style="width: ${Math.min(100, (count / max) * 100)}%;"></div>
+                </div>
+              </div>
+
+              <!-- Attendees list -->
+              ${slotBookings.length > 0 ? `
+                <div class="attendees-pills">
+                  ${slotBookings.map(b => {
+                    const st = localStudents.find(s => s.id === b.studentId);
+                    const name = st ? `${st.firstName} ${st.lastName ? st.lastName[0] + '.' : ''}` : 'Élève';
+                    const isMe = myStudentId && b.studentId === myStudentId;
+                    return `<span class="attendee-chip ${isMe ? 'is-me' : ''}">👤 ${name}</span>`;
+                  }).join('')}
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Action Button -->
+            ${isBookedByMe ? `
+              <button class="btn btn-danger" onclick="handleUnenroll(${slot.id})">
+                <span>❌</span> Annuler mon inscription
+              </button>
+            ` : `
+              <button class="btn btn-primary" onclick="handleRegister(${slot.id})">
+                <span>${isFull ? '⏳' : '✍️'}</span> ${isFull ? 'M\'inscrire en Liste d\'attente' : 'Réserver ce créneau'}
+              </button>
+            `}
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // Render My Bookings Tab
+    function renderMyBookings() {
+      const container = document.getElementById("myBookingsList");
+      const p = getProfile();
+      const myStudent = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
+      const myStudentId = myStudent ? myStudent.id : null;
+
+      if (!myStudentId) {
+        container.innerHTML = `<p style="color: var(--text-muted); font-size: 13px;">Renseignez votre profil pour voir vos réservations.</p>`;
+        return;
+      }
+
+      const myBookings = localBookings.filter(b => b.studentId === myStudentId);
+      if (myBookings.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 30px 10px; color: var(--text-muted);">
+            <div style="font-size: 28px; margin-bottom: 8px;">🪂</div>
+            <p style="font-weight: 700; color: #fff;">Vous n'avez aucun créneau réservé</p>
+            <p style="font-size: 12px; margin-top: 4px;">Consultez le planning pour réserver votre prochaine séance.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = "";
+      myBookings.forEach(b => {
+        const slot = localSlots.find(s => s.id === b.slotId);
+        if (!slot) return;
+        const isVol = slot.lessonType.toUpperCase() === "VOL";
+
+        html += `
+          <div class="slot-item booked-by-me" style="margin-bottom: 10px;">
+            <div class="slot-header">
+              <div class="slot-type-badge ${isVol ? 'slot-type-vol' : 'slot-type-gonflage'}">
+                <span>${isVol ? '✈️' : '🪂'}</span>
+                <span>${slot.lessonType}</span>
+              </div>
+              <div class="slot-time">🕒 ${slot.startTime} - ${slot.endTime}</div>
+            </div>
+            <div style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 4px;">
+              🗓️ ${formatFrenchDate(slot.dateIso)}
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+              📍 ${slot.location || 'Plouharnel (56)'}
+            </div>
+            <button class="btn btn-danger" style="padding: 8px;" onclick="handleUnenroll(${slot.id})">
+              <span>❌</span> Se désinscrire
+            </button>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // Render Student Progress
+    function renderProgress() {
+      const container = document.getElementById("progressDisplay");
+      const p = getProfile();
+      const myStudent = localStudents.find(s => s.phone.replace(/[^0-9]/g, '') === p.phone.replace(/[^0-9]/g, ''));
+      if (!myStudent) return;
+
+      const prog = localProgress.find(pr => pr.studentId === myStudent.id);
+      if (!prog) {
+        container.innerHTML = `<p style="font-size: 12px; color: var(--text-muted);">En attente de validation de vos premières compétences par votre moniteur.</p>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+          <div style="background: var(--bg-inner); padding: 10px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 18px; font-weight: 800; color: var(--primary-light);">${prog.totalFlightsCount || 0}</div>
+            <div style="font-size: 10px; color: var(--text-muted);">VOLS EFFECTUÉS</div>
+          </div>
+          <div style="background: var(--bg-inner); padding: 10px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 18px; font-weight: 800; color: #34d399;">${prog.totalFlightMinutes || 0} min</div>
+            <div style="font-size: 10px; color: var(--text-muted);">TEMPS DE VOL</div>
+          </div>
+        </div>
+        ${prog.instructorNotes ? `
+          <div style="background: var(--bg-inner); padding: 10px; border-radius: 8px; font-size: 12px; border-left: 3px solid var(--primary-light);">
+            <b>Note du Moniteur :</b><br><i>${prog.instructorNotes}</i>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    // Date formatting helper
+    function formatFrenchDate(dateIso) {
+      if (!dateIso) return "";
+      const parts = dateIso.split("-");
+      if (parts.length !== 3) return dateIso;
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      return d.toLocaleDateString("fr-FR", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    // UI Tab Navigation
+    function switchTab(tab) {
+      document.getElementById("tabPlanning").style.display = tab === 'planning' ? 'block' : 'none';
+      document.getElementById("tabMyBookings").style.display = tab === 'myBookings' ? 'block' : 'none';
+      document.getElementById("tabProfile").style.display = tab === 'profile' ? 'block' : 'none';
+
+      document.getElementById("navBtnPlanning").classList.toggle("active", tab === 'planning');
+      document.getElementById("navBtnMyBookings").classList.toggle("active", tab === 'myBookings');
+      document.getElementById("navBtnProfile").classList.toggle("active", tab === 'profile');
+    }
+
+    function setFilter(f) {
+      currentFilter = f;
+      document.querySelectorAll(".filter-pill").forEach(pill => pill.classList.remove("active"));
+      event.target.classList.add("active");
+      renderSlots();
+    }
+
+    function triggerManualSync() {
+      showToast("Actualisation en direct...", "🔄");
+      pollFullSnapshot();
+    }
+
+    function handleSecretDevTap() {
+      secretTapCount++;
+      if (secretTapCount >= 5) {
+        secretTapCount = 0;
+        const code = prompt("Mode Moniteur / Développeur :\nSaisissez le code d'accès :");
+        if (code && MASTER_CODES.includes(code.trim().toUpperCase())) {
+          localStorage.setItem("eagles_license_code", code.trim().toUpperCase());
+          localStorage.setItem("eagles_license_expiry", "9999999999999");
+          localStorage.setItem("eagles_is_master", "true");
+          unlockApp("Accès Moniteur Master");
+          showToast("Déverrouillé en mode Moniteur Master !");
+        }
+      }
+    }
+
+    // Startup Initialization
+    window.addEventListener("DOMContentLoaded", async () => {
+      // Load cached state if available
+      try {
+        localSlots = JSON.parse(localStorage.getItem("eagles_cache_slots") || "[]");
+        localBookings = JSON.parse(localStorage.getItem("eagles_cache_bookings") || "[]");
+        localStudents = JSON.parse(localStorage.getItem("eagles_cache_students") || "[]");
+        localProgress = JSON.parse(localStorage.getItem("eagles_cache_progress") || "[]");
+      } catch (e) {}
+
+      await initDeviceId();
+      await checkActivation();
+      renderProfile();
+      renderSlots();
+      renderMyBookings();
+      renderProgress();
+
+      startRealtimeSync();
+    });
+  </script>
+</body>
+</html>
