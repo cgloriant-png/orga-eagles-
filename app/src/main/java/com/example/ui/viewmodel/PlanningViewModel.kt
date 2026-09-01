@@ -191,8 +191,9 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
 
     fun forceSync() {
         viewModelScope.launch {
+            val slots = repository.getAllSlotsList()
             cloudSyncManager.forceSyncNow()
-            _feedbackMessage.emit("🔄 Synchronisation Cloud effectuée")
+            _feedbackMessage.emit("✅ Synchronisation réussie (${slots.size} créneaux envoyés au Web)")
         }
     }
 

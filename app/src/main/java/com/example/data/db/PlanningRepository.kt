@@ -18,6 +18,8 @@ class PlanningRepository(
     val allBookings: Flow<List<BookingEntity>> = planningDao.getAllBookings()
     val allProgress: Flow<List<StudentProgressEntity>> = planningDao.getAllStudentProgress()
 
+    suspend fun getAllSlotsList(): List<LessonSlotEntity> = planningDao.getAllSlotsList()
+
     // Combined Flow: Slots with enrolled students
     val slotsWithBookings: Flow<List<SlotWithBookings>> = combine(
         allSlots,

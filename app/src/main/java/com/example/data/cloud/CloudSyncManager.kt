@@ -257,34 +257,15 @@ class CloudSyncManager(
     }
 
     fun recordDeletedId(type: String, id: Long) {
-        val currentSet = prefs.getStringSet("deleted_$type", emptySet())?.toMutableSet() ?: mutableSetOf()
-        currentSet.add(id.toString())
-        prefs.edit().putStringSet("deleted_$type", currentSet).apply()
         pushFullSync(immediate = true)
     }
 
     private fun getDeletedIds(type: String): Set<Long> {
-        return prefs.getStringSet("deleted_$type", emptySet())
-            ?.mapNotNull { it.toLongOrNull() }
-            ?.toSet() ?: emptySet()
+        return emptySet()
     }
 
     private fun saveRemoteDeletedIds(slotIds: Set<Long>, bookingIds: Set<Long>, studentIds: Set<Long>) {
-        if (slotIds.isNotEmpty()) {
-            val currentSlots = prefs.getStringSet("deleted_slot", emptySet())?.toMutableSet() ?: mutableSetOf()
-            currentSlots.addAll(slotIds.map { it.toString() })
-            prefs.edit().putStringSet("deleted_slot", currentSlots).apply()
-        }
-        if (bookingIds.isNotEmpty()) {
-            val currentBookings = prefs.getStringSet("deleted_booking", emptySet())?.toMutableSet() ?: mutableSetOf()
-            currentBookings.addAll(bookingIds.map { it.toString() })
-            prefs.edit().putStringSet("deleted_booking", currentBookings).apply()
-        }
-        if (studentIds.isNotEmpty()) {
-            val currentStudents = prefs.getStringSet("deleted_student", emptySet())?.toMutableSet() ?: mutableSetOf()
-            currentStudents.addAll(studentIds.map { it.toString() })
-            prefs.edit().putStringSet("deleted_student", currentStudents).apply()
-        }
+        // No-op: full snapshot contains the authoritative state
     }
 
     fun forceSyncNow() {
@@ -320,19 +301,13 @@ class CloudSyncManager(
                         pollResp.close()
                         val lines = bodyText.split("\n").filter { it.isNotBlank() }
 
-                        // Collect and merge across all historical snapshots to ensure no student, booking, or slot is ever lost
-                        val aggregatedSlots = mutableMapOf<Long, JSONObject>()
-                        val aggregatedStudents = mutableMapOf<Long, JSONObject>()
-                        val aggregatedBookings = mutableMapOf<Long, JSONObject>()
-                        val aggregatedProgress = mutableMapOf<Long, JSONObject>()
-                        val aggregatedDeletedSlots = mutableSetOf<Long>()
-                        val aggregatedDeletedBookings = mutableSetOf<Long>()
-                        val aggregatedDeletedStudents = mutableSetOf<Long>()
-                        val aggregatedRevokedDevices = mutableSetOf<String>()
-                        val aggregatedRevokedKeys = mutableSetOf<String>()
-
-                        var latestSnapshotObj: JSONObject? = null
-                        var latestTimestamp: Long = 0L
+                        // Parse all snapshots
+                        val parsedSnapshots = mutableListOf<Pair<Long, JSONObject>>()
+                        val allStudentBookings = mutableMapOf<Long, JSONObject>()
+                        val allStudents = mutableMapOf<Long, JSONObject>()
+                        val allProgress = mutableMapOf<Long, JSONObject>()
+                        val revokedDevices = mutableSetOf<String>()
+                        val revokedKeys = mutableSetOf<String>()
 
                         for (line in lines) {
                             try {
@@ -343,105 +318,90 @@ class CloudSyncManager(
                                     if (decompressed.startsWith("{") && (decompressed.contains("\"slots\"") || decompressed.contains("\"bookings\""))) {
                                         val snap = JSONObject(decompressed)
                                         val snapTime = snap.optLong("lastUpdated", msgObj.optLong("time", 0L) * 1000L)
-                                        if (snapTime >= latestTimestamp) {
-                                            latestTimestamp = snapTime
-                                            latestSnapshotObj = snap
-                                        }
+                                        parsedSnapshots.add(Pair(snapTime, snap))
 
-                                        val delSlots = snap.optJSONArray("deletedSlotIds") ?: JSONArray()
-                                        for (i in 0 until delSlots.length()) aggregatedDeletedSlots.add(delSlots.getLong(i))
-
-                                        val delBks = snap.optJSONArray("deletedBookingIds") ?: JSONArray()
-                                        for (i in 0 until delBks.length()) aggregatedDeletedBookings.add(delBks.getLong(i))
-
-                                        val delStuds = snap.optJSONArray("deletedStudentIds") ?: JSONArray()
-                                        for (i in 0 until delStuds.length()) aggregatedDeletedStudents.add(delStuds.getLong(i))
-
-                                        val revDevs = snap.optJSONArray("revokedDevices") ?: JSONArray()
-                                        for (i in 0 until revDevs.length()) aggregatedRevokedDevices.add(revDevs.getString(i))
-
-                                        val revKeys = snap.optJSONArray("revokedKeys") ?: JSONArray()
-                                        for (i in 0 until revKeys.length()) aggregatedRevokedKeys.add(revKeys.getString(i))
-
-                                        val slotsArr = snap.optJSONArray("slots") ?: JSONArray()
-                                        for (i in 0 until slotsArr.length()) {
-                                            val s = slotsArr.getJSONObject(i)
-                                            val sId = s.optLong("id")
-                                            if (sId !in aggregatedDeletedSlots) {
-                                                aggregatedSlots[sId] = s
-                                            }
-                                        }
-                                        val studsArr = snap.optJSONArray("students") ?: JSONArray()
-                                        for (i in 0 until studsArr.length()) {
-                                            val st = studsArr.getJSONObject(i)
+                                        // Collect students and bookings
+                                        val studs = snap.optJSONArray("students") ?: JSONArray()
+                                        for (i in 0 until studs.length()) {
+                                            val st = studs.getJSONObject(i)
                                             val stId = st.optLong("id")
                                             val fn = st.optString("firstName", "").trim()
                                             val ln = st.optString("lastName", "").trim()
                                             val isDummy = (fn in listOf("Jean", "Sophie", "Lucas", "Thomas", "Marie") && ln in listOf("Dupont", "Martin", "Bernard", "Petit", "Leroy"))
-                                            if (!isDummy && stId !in aggregatedDeletedStudents) {
-                                                aggregatedStudents[stId] = st
+                                            if (!isDummy && stId > 0) {
+                                                allStudents[stId] = st
                                             }
                                         }
-                                        val bksArr = snap.optJSONArray("bookings") ?: JSONArray()
-                                        for (i in 0 until bksArr.length()) {
-                                            val b = bksArr.getJSONObject(i)
+
+                                        val bks = snap.optJSONArray("bookings") ?: JSONArray()
+                                        for (i in 0 until bks.length()) {
+                                            val b = bks.getJSONObject(i)
                                             val bId = b.optLong("id")
-                                            if (bId !in aggregatedDeletedBookings) {
-                                                aggregatedBookings[bId] = b
+                                            if (bId > 0) {
+                                                allStudentBookings[bId] = b
                                             }
                                         }
-                                        val prgArr = snap.optJSONArray("progress") ?: JSONArray()
-                                        for (i in 0 until prgArr.length()) {
-                                            val p = prgArr.getJSONObject(i)
+
+                                        val prgs = snap.optJSONArray("progress") ?: JSONArray()
+                                        for (i in 0 until prgs.length()) {
+                                            val p = prgs.getJSONObject(i)
                                             val pId = p.optLong("studentId")
-                                            if (pId !in aggregatedDeletedStudents) {
-                                                aggregatedProgress[pId] = p
+                                            if (pId > 0) {
+                                                allProgress[pId] = p
                                             }
                                         }
+
+                                        val revDevs = snap.optJSONArray("revokedDevices") ?: JSONArray()
+                                        for (i in 0 until revDevs.length()) revokedDevices.add(revDevs.getString(i))
+                                        val revK = snap.optJSONArray("revokedKeys") ?: JSONArray()
+                                        for (i in 0 until revK.length()) revokedKeys.add(revK.getString(i))
                                     }
                                 }
                             } catch (ignored: Exception) {}
                         }
 
-                        // Remove deleted entries
-                        aggregatedDeletedSlots.forEach { aggregatedSlots.remove(it) }
-                        aggregatedDeletedBookings.forEach { aggregatedBookings.remove(it) }
-                        aggregatedDeletedStudents.forEach { aggregatedStudents.remove(it) }
+                        // Find the newest snapshot that contains slots
+                        val latestWithSlots = parsedSnapshots
+                            .sortedByDescending { it.first }
+                            .firstOrNull { it.second.optJSONArray("slots")?.length() ?: 0 > 0 }
+                            ?.second
 
-                        // Deduplicate slots by (dateIso + startTime + lessonType) to avoid accumulating duplicates across history
-                        val deduplicatedSlots = mutableMapOf<Long, JSONObject>()
+                        val rawSlotsList = mutableListOf<JSONObject>()
+                        if (latestWithSlots != null) {
+                            val slotsArr = latestWithSlots.optJSONArray("slots") ?: JSONArray()
+                            for (i in 0 until slotsArr.length()) {
+                                rawSlotsList.add(slotsArr.getJSONObject(i))
+                            }
+                        }
+
+                        // Deduplicate slots by dateIso + startTime + lessonType
                         val slotsByKey = mutableMapOf<String, JSONObject>()
-                        for ((sId, slotObj) in aggregatedSlots) {
+                        for (slotObj in rawSlotsList) {
                             val key = "${slotObj.optString("dateIso")}_${slotObj.optString("startTime")}_${slotObj.optString("lessonType").uppercase()}"
                             val existing = slotsByKey[key]
                             if (existing == null) {
                                 slotsByKey[key] = slotObj
-                                deduplicatedSlots[sId] = slotObj
                             } else {
+                                val sId = slotObj.optLong("id")
                                 val exId = existing.optLong("id")
-                                val hasBksNew = aggregatedBookings.values.any { it.optLong("slotId") == sId }
-                                val hasBksOld = aggregatedBookings.values.any { it.optLong("slotId") == exId }
+                                val hasBksNew = allStudentBookings.values.any { it.optLong("slotId") == sId }
+                                val hasBksOld = allStudentBookings.values.any { it.optLong("slotId") == exId }
                                 if (hasBksNew && !hasBksOld) {
-                                    deduplicatedSlots.remove(exId)
                                     slotsByKey[key] = slotObj
-                                    deduplicatedSlots[sId] = slotObj
-                                    aggregatedDeletedSlots.add(exId)
-                                } else {
-                                    aggregatedDeletedSlots.add(sId)
                                 }
                             }
                         }
 
                         val mergedObj = JSONObject()
-                        mergedObj.put("slots", JSONArray(deduplicatedSlots.values))
-                        mergedObj.put("students", JSONArray(aggregatedStudents.values))
-                        mergedObj.put("bookings", JSONArray(aggregatedBookings.values))
-                        mergedObj.put("progress", JSONArray(aggregatedProgress.values))
-                        mergedObj.put("deletedSlotIds", JSONArray(aggregatedDeletedSlots.toList()))
-                        mergedObj.put("deletedBookingIds", JSONArray(aggregatedDeletedBookings.toList()))
-                        mergedObj.put("deletedStudentIds", JSONArray(aggregatedDeletedStudents.toList()))
-                        mergedObj.put("revokedDevices", JSONArray(aggregatedRevokedDevices.toList()))
-                        mergedObj.put("revokedKeys", JSONArray(aggregatedRevokedKeys.toList()))
+                        mergedObj.put("slots", JSONArray(slotsByKey.values))
+                        mergedObj.put("students", JSONArray(allStudents.values))
+                        mergedObj.put("bookings", JSONArray(allStudentBookings.values))
+                        mergedObj.put("progress", JSONArray(allProgress.values))
+                        mergedObj.put("deletedSlotIds", JSONArray())
+                        mergedObj.put("deletedBookingIds", JSONArray())
+                        mergedObj.put("deletedStudentIds", JSONArray())
+                        mergedObj.put("revokedDevices", JSONArray(revokedDevices.toList()))
+                        mergedObj.put("revokedKeys", JSONArray(revokedKeys.toList()))
                         remoteSnapshot = mergedObj
                     } else {
                         pollResp.close()

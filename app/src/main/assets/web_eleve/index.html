@@ -1378,13 +1378,10 @@
         const text = await res.text();
         const lines = text.trim().split("\n").filter(l => l.trim().length > 0);
         
-        const aggSlots = new Map();
+        const parsedSnapshots = [];
         const aggStudents = new Map();
         const aggBookings = new Map();
         const aggProgress = new Map();
-        const aggDeletedSlots = new Set();
-        const aggDeletedBookings = new Set();
-        const aggDeletedStudents = new Set();
         let latestRevokedDevices = [];
 
         for (let i = 0; i < lines.length; i++) {
@@ -1395,27 +1392,20 @@
               const decompressed = await decompressMessage(rawMsg);
               if (decompressed && decompressed.startsWith("{") && (decompressed.includes('"slots"') || decompressed.includes('"bookings"'))) {
                 const snap = JSON.parse(decompressed);
+                const snapTime = snap.lastUpdated || (msgObj.time ? msgObj.time * 1000 : 0);
+                parsedSnapshots.push({ snapTime, snap });
 
-                (snap.deletedSlotIds || []).forEach(id => aggDeletedSlots.add(id));
-                (snap.deletedBookingIds || []).forEach(id => aggDeletedBookings.add(id));
-                (snap.deletedStudentIds || []).forEach(id => aggDeletedStudents.add(id));
-
-                (snap.slots || []).forEach(s => {
-                  if (!aggDeletedSlots.has(s.id)) {
-                    aggSlots.set(s.id, s);
-                  }
-                });
                 (snap.students || []).forEach(st => {
                   const fn = (st.firstName || "").trim();
                   const ln = (st.lastName || "").trim();
                   const isDummy = (["Jean", "Sophie", "Lucas", "Thomas", "Marie"].includes(fn) && ["Dupont", "Martin", "Bernard", "Petit", "Leroy"].includes(ln));
-                  if (!isDummy && !aggDeletedStudents.has(st.id)) aggStudents.set(st.id, st);
+                  if (!isDummy && st.id) aggStudents.set(st.id, st);
                 });
                 (snap.bookings || []).forEach(b => {
-                  if (!aggDeletedBookings.has(b.id)) aggBookings.set(b.id, b);
+                  if (b.id) aggBookings.set(b.id, b);
                 });
                 (snap.progress || []).forEach(p => {
-                  if (!aggDeletedStudents.has(p.studentId)) aggProgress.set(p.studentId, p);
+                  if (p.studentId) aggProgress.set(p.studentId, p);
                 });
                 if (snap.revokedDevices && Array.isArray(snap.revokedDevices)) {
                   latestRevokedDevices = snap.revokedDevices;
@@ -1425,31 +1415,24 @@
           } catch (e) {}
         }
 
-        aggDeletedSlots.forEach(id => aggSlots.delete(id));
-        aggDeletedBookings.forEach(id => aggBookings.delete(id));
-        aggDeletedStudents.forEach(id => aggStudents.delete(id));
+        // Find the newest snapshot that contains active slots
+        parsedSnapshots.sort((a, b) => b.snapTime - a.snapTime);
+        const latestWithSlots = parsedSnapshots.find(item => item.snap.slots && item.snap.slots.length > 0);
 
-        // Deduplicate slots by (dateIso + startTime + lessonType)
-        const deduplicatedSlotsMap = new Map();
-        const slotsByKey = new Map();
-        aggSlots.forEach((slot, id) => {
-          const key = `${slot.dateIso}_${slot.startTime}_${(slot.lessonType || '').toUpperCase()}`;
-          const existing = slotsByKey.get(key);
-          if (!existing) {
-            slotsByKey.set(key, slot);
-            deduplicatedSlotsMap.set(id, slot);
-          } else {
-            const hasBksNew = Array.from(aggBookings.values()).some(b => b.slotId === id);
-            const hasBksOld = Array.from(aggBookings.values()).some(b => b.slotId === existing.id);
-            if (hasBksNew && !hasBksOld) {
-              deduplicatedSlotsMap.delete(existing.id);
+        let finalSlots = [];
+        if (latestWithSlots && latestWithSlots.snap.slots) {
+          const slotsByKey = new Map();
+          latestWithSlots.snap.slots.forEach(slot => {
+            const key = `${slot.dateIso}_${slot.startTime}_${(slot.lessonType || '').toUpperCase()}`;
+            if (!slotsByKey.has(key)) {
               slotsByKey.set(key, slot);
-              deduplicatedSlotsMap.set(id, slot);
+              finalSlots.push(slot);
             }
-          }
-        });
+          });
+        } else if (localSlots.length > 0) {
+          finalSlots = localSlots;
+        }
 
-        const finalSlots = Array.from(deduplicatedSlotsMap.values());
         const finalStudents = Array.from(aggStudents.values());
         const finalBookings = Array.from(aggBookings.values());
         const finalProgress = Array.from(aggProgress.values());
