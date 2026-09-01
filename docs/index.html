@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Eagles Academy • Espace Élèves</title>
+  <title>Eagles Cool • Espace Élèves</title>
   
   <!-- iOS PWA Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -766,7 +766,7 @@
     <div class="brand-group" onclick="handleSecretDevTap()">
       <div class="brand-icon">🦅</div>
       <div>
-        <div class="brand-title">Eagles Academy</div>
+        <div class="brand-title">Eagles Cool</div>
         <div class="brand-subtitle" id="schoolSubtitle">Plouharnel (56) • École Élèves</div>
       </div>
     </div>
@@ -1163,7 +1163,7 @@
     }
 
     function sendIdToInstructorWhatsApp() {
-      const text = encodeURIComponent(`Bonjour, voici mon ID appareil pour activer mon accès Eagles Academy Paramoteur :\n\n👉 ${myDeviceId}\n\nMerci !`);
+      const text = encodeURIComponent(`Bonjour, voici mon ID appareil pour activer mon accès Eagles Cool Paramoteur :\n\n👉 ${myDeviceId}\n\nMerci !`);
       window.open(`https://wa.me/?text=${text}`, '_blank');
     }
 
@@ -1450,6 +1450,7 @@
             revokedDevices: latestRevokedDevices
           });
         }
+        updateSyncStatus("online", "En direct");
       } catch (err) {
         console.warn("Poll error", err);
       }

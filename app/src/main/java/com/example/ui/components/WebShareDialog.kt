@@ -47,7 +47,7 @@ fun WebShareDialog(
         val fullUrl = if (targetUrl.contains("#")) targetUrl else "$targetUrl#$cleanSchool"
 
         return """
-🦅 *EAGLES ACADEMY - ESPACE ÉLÈVES & PLANNING*
+🦅 *EAGLES COOL - ESPACE ÉLÈVES & PLANNING*
 École de Paramoteur de Plouharnel
 
 Voici le lien pour consulter le planning et réserver vos séances de vol et de gonflage sur votre iPhone, Android ou ordinateur :

@@ -64,7 +64,7 @@ fun ActivationScreen(
     }
 
     fun sendViaWhatsApp() {
-        val message = "Bonjour !\nVoici mon Identifiant Appareil pour activer mon application Eagles Academy :\n\n👉 $deviceId\n\nMerci de m'envoyer ma clé d'activation !"
+        val message = "Bonjour !\nVoici mon Identifiant Appareil pour activer mon application Eagles Cool :\n\n👉 $deviceId\n\nMerci de m'envoyer ma clé d'activation !"
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, message)
@@ -94,7 +94,7 @@ fun ActivationScreen(
             action = Intent.ACTION_SEND
             putExtra(
                 Intent.EXTRA_TEXT,
-                "Bonjour, voici mon identifiant d'appareil pour activer l'application Eagles Academy : $deviceId"
+                "Bonjour, voici mon identifiant d'appareil pour activer l'application Eagles Cool : $deviceId"
             )
             type = "text/plain"
         }
@@ -129,7 +129,7 @@ fun ActivationScreen(
         ) {
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Eagles Academy Logo (Tap 5 times to open hidden Master code dialog)
+            // Eagles Cool Logo (Tap 5 times to open hidden Master code dialog)
             Box(
                 modifier = Modifier
                     .size(90.dp)
@@ -147,7 +147,7 @@ fun ActivationScreen(
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.img_eagles_logo_1787304896446),
-                    contentDescription = "Logo Eagles Academy",
+                    contentDescription = "Logo Eagles Cool",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
                 )
@@ -156,7 +156,7 @@ fun ActivationScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "EAGLES ACADEMY",
+                text = "EAGLES COOL",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Black,
                 color = HighDensityHeaderTitle,

@@ -51,7 +51,7 @@ fun GaugeHeader(
                 .fillMaxWidth()
                 .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 8.dp)
         ) {
-            // Top Eagles Academy Brand Strip
+            // Top Eagles Cool Brand Strip
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -71,13 +71,13 @@ fun GaugeHeader(
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.img_eagles_logo_1787304896446),
-                            contentDescription = "Logo Eagles Academy",
+                            contentDescription = "Logo Eagles Cool",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Fit
                         )
                     }
                     Text(
-                        text = "EAGLES ACADEMY",
+                        text = "EAGLES COOL",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Black,
                         color = HighDensityHeaderTitle,

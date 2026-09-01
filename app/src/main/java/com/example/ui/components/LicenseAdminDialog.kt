@@ -58,7 +58,7 @@ fun LicenseAdminDialog(
 
     fun shareKey(key: String, pilotName: String, durationLabel: String) {
         val pilotInfo = if (pilotName.isNotBlank()) " pour $pilotName" else ""
-        val text = "Bonjour$pilotInfo,\nVoici votre clé d'activation pour l'application Eagles Academy ($durationLabel) :\n\n👉 $key\n\nCopiez cette clé et collez-la dans l'application pour déverrouiller votre accès. Bons vols !"
+        val text = "Bonjour$pilotInfo,\nVoici votre clé d'activation pour l'application Eagles Cool ($durationLabel) :\n\n👉 $key\n\nCopiez cette clé et collez-la dans l'application pour déverrouiller votre accès. Bons vols !"
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, text)
@@ -243,7 +243,7 @@ fun LicenseAdminDialog(
                                         val fullUrl = if (targetUrl.contains("#")) targetUrl else "${targetUrl.trimEnd('/')}/#PLOUHARNEL"
 
                                         val shareText = """
-🦅 *EAGLES ACADEMY - PLANNING ÉLÈVES*
+🦅 *EAGLES COOL - PLANNING ÉLÈVES*
 Accès iPhone & Web pour réserver vos créneaux de vol & gonflage :
 
 📲 $fullUrl
