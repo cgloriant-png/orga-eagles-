@@ -320,7 +320,7 @@ class CloudSyncManager(
                         pollResp.close()
                         val lines = bodyText.split("\n").filter { it.isNotBlank() }
 
-                        // Collect and merge across all historical snapshots to ensure no student or slot is ever lost
+                        // Collect and merge across all historical snapshots to ensure no student, booking, or slot is ever lost
                         val aggregatedSlots = mutableMapOf<Long, JSONObject>()
                         val aggregatedStudents = mutableMapOf<Long, JSONObject>()
                         val aggregatedBookings = mutableMapOf<Long, JSONObject>()
@@ -328,6 +328,8 @@ class CloudSyncManager(
                         val aggregatedDeletedSlots = mutableSetOf<Long>()
                         val aggregatedDeletedBookings = mutableSetOf<Long>()
                         val aggregatedDeletedStudents = mutableSetOf<Long>()
+                        val aggregatedRevokedDevices = mutableSetOf<String>()
+                        val aggregatedRevokedKeys = mutableSetOf<String>()
 
                         var latestSnapshotObj: JSONObject? = null
                         var latestTimestamp: Long = 0L
@@ -338,7 +340,7 @@ class CloudSyncManager(
                                 val rawMsg = msgObj.optString("message", "")
                                 if (rawMsg.isNotBlank() && !rawMsg.contains("You received a file")) {
                                     val decompressed = decompressPayload(rawMsg)
-                                    if (decompressed.startsWith("{") && decompressed.contains("\"slots\"")) {
+                                    if (decompressed.startsWith("{") && (decompressed.contains("\"slots\"") || decompressed.contains("\"bookings\""))) {
                                         val snap = JSONObject(decompressed)
                                         val snapTime = snap.optLong("lastUpdated", msgObj.optLong("time", 0L) * 1000L)
                                         if (snapTime >= latestTimestamp) {
@@ -346,72 +348,77 @@ class CloudSyncManager(
                                             latestSnapshotObj = snap
                                         }
 
+                                        val delSlots = snap.optJSONArray("deletedSlotIds") ?: JSONArray()
+                                        for (i in 0 until delSlots.length()) aggregatedDeletedSlots.add(delSlots.getLong(i))
+
+                                        val delBks = snap.optJSONArray("deletedBookingIds") ?: JSONArray()
+                                        for (i in 0 until delBks.length()) aggregatedDeletedBookings.add(delBks.getLong(i))
+
+                                        val delStuds = snap.optJSONArray("deletedStudentIds") ?: JSONArray()
+                                        for (i in 0 until delStuds.length()) aggregatedDeletedStudents.add(delStuds.getLong(i))
+
+                                        val revDevs = snap.optJSONArray("revokedDevices") ?: JSONArray()
+                                        for (i in 0 until revDevs.length()) aggregatedRevokedDevices.add(revDevs.getString(i))
+
+                                        val revKeys = snap.optJSONArray("revokedKeys") ?: JSONArray()
+                                        for (i in 0 until revKeys.length()) aggregatedRevokedKeys.add(revKeys.getString(i))
+
                                         val slotsArr = snap.optJSONArray("slots") ?: JSONArray()
                                         for (i in 0 until slotsArr.length()) {
                                             val s = slotsArr.getJSONObject(i)
-                                            aggregatedSlots[s.optLong("id")] = s
+                                            val sId = s.optLong("id")
+                                            if (sId !in aggregatedDeletedSlots) {
+                                                aggregatedSlots[sId] = s
+                                            }
                                         }
                                         val studsArr = snap.optJSONArray("students") ?: JSONArray()
                                         for (i in 0 until studsArr.length()) {
                                             val st = studsArr.getJSONObject(i)
+                                            val stId = st.optLong("id")
                                             val fn = st.optString("firstName", "").trim()
                                             val ln = st.optString("lastName", "").trim()
                                             val isDummy = (fn in listOf("Jean", "Sophie", "Lucas", "Thomas", "Marie") && ln in listOf("Dupont", "Martin", "Bernard", "Petit", "Leroy"))
-                                            if (!isDummy) {
-                                                aggregatedStudents[st.optLong("id")] = st
+                                            if (!isDummy && stId !in aggregatedDeletedStudents) {
+                                                aggregatedStudents[stId] = st
                                             }
                                         }
                                         val bksArr = snap.optJSONArray("bookings") ?: JSONArray()
                                         for (i in 0 until bksArr.length()) {
                                             val b = bksArr.getJSONObject(i)
-                                            aggregatedBookings[b.optLong("id")] = b
+                                            val bId = b.optLong("id")
+                                            if (bId !in aggregatedDeletedBookings) {
+                                                aggregatedBookings[bId] = b
+                                            }
                                         }
                                         val prgArr = snap.optJSONArray("progress") ?: JSONArray()
                                         for (i in 0 until prgArr.length()) {
                                             val p = prgArr.getJSONObject(i)
-                                            aggregatedProgress[p.optLong("studentId")] = p
+                                            val pId = p.optLong("studentId")
+                                            if (pId !in aggregatedDeletedStudents) {
+                                                aggregatedProgress[pId] = p
+                                            }
                                         }
                                     }
                                 }
                             } catch (ignored: Exception) {}
                         }
 
-                        if (latestSnapshotObj != null) {
-                            // Merge active students and bookings from history with the latest snapshot
-                            val mergedObj = JSONObject(latestSnapshotObj.toString())
-                            
-                            val snapStuds = mergedObj.optJSONArray("students") ?: JSONArray()
-                            val existingStudIds = mutableSetOf<Long>()
-                            for (i in 0 until snapStuds.length()) {
-                                existingStudIds.add(snapStuds.getJSONObject(i).optLong("id"))
-                            }
-                            for ((id, st) in aggregatedStudents) {
-                                if (id !in existingStudIds) snapStuds.put(st)
-                            }
-                            mergedObj.put("students", snapStuds)
+                        // Remove deleted entries
+                        aggregatedDeletedSlots.forEach { aggregatedSlots.remove(it) }
+                        aggregatedDeletedBookings.forEach { aggregatedBookings.remove(it) }
+                        aggregatedDeletedStudents.forEach { aggregatedStudents.remove(it) }
 
-                            val snapBks = mergedObj.optJSONArray("bookings") ?: JSONArray()
-                            val existingBkIds = mutableSetOf<Long>()
-                            for (i in 0 until snapBks.length()) {
-                                existingBkIds.add(snapBks.getJSONObject(i).optLong("id"))
-                            }
-                            for ((id, b) in aggregatedBookings) {
-                                if (id !in existingBkIds) snapBks.put(b)
-                            }
-                            mergedObj.put("bookings", snapBks)
-
-                            remoteSnapshot = mergedObj
-                        } else if (aggregatedSlots.isNotEmpty() || aggregatedStudents.isNotEmpty()) {
-                            val mergedObj = JSONObject()
-                            mergedObj.put("slots", JSONArray(aggregatedSlots.values))
-                            mergedObj.put("students", JSONArray(aggregatedStudents.values))
-                            mergedObj.put("bookings", JSONArray(aggregatedBookings.values))
-                            mergedObj.put("progress", JSONArray(aggregatedProgress.values))
-                            mergedObj.put("deletedSlotIds", JSONArray(aggregatedDeletedSlots.toList()))
-                            mergedObj.put("deletedBookingIds", JSONArray(aggregatedDeletedBookings.toList()))
-                            mergedObj.put("deletedStudentIds", JSONArray(aggregatedDeletedStudents.toList()))
-                            remoteSnapshot = mergedObj
-                        }
+                        val mergedObj = JSONObject()
+                        mergedObj.put("slots", JSONArray(aggregatedSlots.values))
+                        mergedObj.put("students", JSONArray(aggregatedStudents.values))
+                        mergedObj.put("bookings", JSONArray(aggregatedBookings.values))
+                        mergedObj.put("progress", JSONArray(aggregatedProgress.values))
+                        mergedObj.put("deletedSlotIds", JSONArray(aggregatedDeletedSlots.toList()))
+                        mergedObj.put("deletedBookingIds", JSONArray(aggregatedDeletedBookings.toList()))
+                        mergedObj.put("deletedStudentIds", JSONArray(aggregatedDeletedStudents.toList()))
+                        mergedObj.put("revokedDevices", JSONArray(aggregatedRevokedDevices.toList()))
+                        mergedObj.put("revokedKeys", JSONArray(aggregatedRevokedKeys.toList()))
+                        remoteSnapshot = mergedObj
                     } else {
                         pollResp.close()
                     }

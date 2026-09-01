@@ -805,6 +805,8 @@
 
       <!-- MONTH VIEW CALENDAR SECTION -->
       <div id="monthCalendarSection" style="display: block;">
+        <div id="monthSelectorChips" style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 8px; scrollbar-width: none;"></div>
+
         <div class="month-nav-header">
           <button class="month-nav-btn" onclick="changeCalendarMonth(-1)" title="Mois précédent">◀</button>
           <div class="month-title" id="monthCalendarTitle">Septembre 2026</div>
@@ -1385,31 +1387,36 @@
         const aggDeletedStudents = new Set();
         let latestRevokedDevices = [];
 
-        let latestSnap = null;
-        let latestTimestamp = 0;
-
         for (let i = 0; i < lines.length; i++) {
           try {
             const msgObj = JSON.parse(lines[i]);
             let rawMsg = msgObj.message || "";
             if (rawMsg && !rawMsg.includes("You received a file")) {
               const decompressed = await decompressMessage(rawMsg);
-              if (decompressed && decompressed.startsWith("{") && decompressed.includes('"slots"')) {
+              if (decompressed && decompressed.startsWith("{") && (decompressed.includes('"slots"') || decompressed.includes('"bookings"'))) {
                 const snap = JSON.parse(decompressed);
-                const snapTime = snap.lastUpdated || (msgObj.time ? msgObj.time * 1000 : 0);
-                if (snapTime >= latestTimestamp) {
-                  latestTimestamp = snapTime;
-                  latestSnap = snap;
-                }
-                (snap.slots || []).forEach(s => aggSlots.set(s.id, s));
+
+                (snap.deletedSlotIds || []).forEach(id => aggDeletedSlots.add(id));
+                (snap.deletedBookingIds || []).forEach(id => aggDeletedBookings.add(id));
+                (snap.deletedStudentIds || []).forEach(id => aggDeletedStudents.add(id));
+
+                (snap.slots || []).forEach(s => {
+                  if (!aggDeletedSlots.has(s.id)) {
+                    aggSlots.set(s.id, s);
+                  }
+                });
                 (snap.students || []).forEach(st => {
                   const fn = (st.firstName || "").trim();
                   const ln = (st.lastName || "").trim();
                   const isDummy = (["Jean", "Sophie", "Lucas", "Thomas", "Marie"].includes(fn) && ["Dupont", "Martin", "Bernard", "Petit", "Leroy"].includes(ln));
-                  if (!isDummy) aggStudents.set(st.id, st);
+                  if (!isDummy && !aggDeletedStudents.has(st.id)) aggStudents.set(st.id, st);
                 });
-                (snap.bookings || []).forEach(b => aggBookings.set(b.id, b));
-                (snap.progress || []).forEach(p => aggProgress.set(p.studentId, p));
+                (snap.bookings || []).forEach(b => {
+                  if (!aggDeletedBookings.has(b.id)) aggBookings.set(b.id, b);
+                });
+                (snap.progress || []).forEach(p => {
+                  if (!aggDeletedStudents.has(p.studentId)) aggProgress.set(p.studentId, p);
+                });
                 if (snap.revokedDevices && Array.isArray(snap.revokedDevices)) {
                   latestRevokedDevices = snap.revokedDevices;
                 }
@@ -1418,32 +1425,22 @@
           } catch (e) {}
         }
 
-        if (latestSnap && latestSnap.slots) {
-          // Merge any students and bookings across recent history so registrations are never lost
-          const combinedStudentsMap = new Map();
-          (latestSnap.students || []).forEach(st => combinedStudentsMap.set(st.id, st));
-          aggStudents.forEach((st, id) => { if (!combinedStudentsMap.has(id)) combinedStudentsMap.set(id, st); });
+        aggDeletedSlots.forEach(id => aggSlots.delete(id));
+        aggDeletedBookings.forEach(id => aggBookings.delete(id));
+        aggDeletedStudents.forEach(id => aggStudents.delete(id));
 
-          const combinedBookingsMap = new Map();
-          (latestSnap.bookings || []).forEach(b => combinedBookingsMap.set(b.id, b));
-          aggBookings.forEach((b, id) => { if (!combinedBookingsMap.has(id)) combinedBookingsMap.set(id, b); });
+        const finalSlots = Array.from(aggSlots.values());
+        const finalStudents = Array.from(aggStudents.values());
+        const finalBookings = Array.from(aggBookings.values());
+        const finalProgress = Array.from(aggProgress.values());
 
-          handleIncomingSnapshot({
-            slots: latestSnap.slots,
-            students: Array.from(combinedStudentsMap.values()),
-            bookings: Array.from(combinedBookingsMap.values()),
-            progress: latestSnap.progress || Array.from(aggProgress.values()),
-            revokedDevices: latestRevokedDevices.length > 0 ? latestRevokedDevices : (latestSnap.revokedDevices || [])
-          });
-        } else if (aggSlots.size > 0 || aggStudents.size > 0) {
-          handleIncomingSnapshot({
-            slots: Array.from(aggSlots.values()),
-            students: Array.from(aggStudents.values()),
-            bookings: Array.from(aggBookings.values()),
-            progress: Array.from(aggProgress.values()),
-            revokedDevices: latestRevokedDevices
-          });
-        }
+        handleIncomingSnapshot({
+          slots: finalSlots,
+          students: finalStudents,
+          bookings: finalBookings,
+          progress: finalProgress,
+          revokedDevices: latestRevokedDevices
+        });
         updateSyncStatus("online", "En direct");
       } catch (err) {
         console.warn("Poll error", err);
@@ -1453,7 +1450,7 @@
     function handleIncomingSnapshot(rawJson) {
       try {
         const snapshot = typeof rawJson === "string" ? JSON.parse(rawJson) : rawJson;
-        if (!snapshot || !snapshot.slots) return;
+        if (!snapshot) return;
 
         if (snapshot.revokedDevices && Array.isArray(snapshot.revokedDevices)) {
           localStorage.setItem("eagles_revoked_devs", JSON.stringify(snapshot.revokedDevices));
@@ -1463,15 +1460,26 @@
           }
         }
 
-        localSlots = snapshot.slots || [];
-        localStudents = snapshot.students || [];
-        localBookings = snapshot.bookings || [];
-        localProgress = snapshot.progress || [];
+        if (snapshot.slots && snapshot.slots.length > 0) {
+          localSlots = snapshot.slots;
+          localStorage.setItem("eagles_cache_slots", JSON.stringify(localSlots));
+        } else if (snapshot.slots && localSlots.length === 0) {
+          localSlots = snapshot.slots;
+          localStorage.setItem("eagles_cache_slots", JSON.stringify(localSlots));
+        }
 
-        localStorage.setItem("eagles_cache_slots", JSON.stringify(localSlots));
-        localStorage.setItem("eagles_cache_bookings", JSON.stringify(localBookings));
-        localStorage.setItem("eagles_cache_students", JSON.stringify(localStudents));
-        localStorage.setItem("eagles_cache_progress", JSON.stringify(localProgress));
+        if (snapshot.students) {
+          localStudents = snapshot.students;
+          localStorage.setItem("eagles_cache_students", JSON.stringify(localStudents));
+        }
+        if (snapshot.bookings) {
+          localBookings = snapshot.bookings;
+          localStorage.setItem("eagles_cache_bookings", JSON.stringify(localBookings));
+        }
+        if (snapshot.progress) {
+          localProgress = snapshot.progress;
+          localStorage.setItem("eagles_cache_progress", JSON.stringify(localProgress));
+        }
 
         updateSyncStatus("online", "En direct");
         renderSlots();
@@ -1494,7 +1502,7 @@
           schoolCode: schoolCode,
           senderId: myDeviceId,
           lastUpdated: Date.now(),
-          slots: localSlots,
+          slots: localSlots.length > 0 ? localSlots : undefined,
           students: localStudents,
           bookings: localBookings,
           progress: localProgress,
@@ -1618,6 +1626,33 @@
 
     function changeCalendarMonth(delta) {
       calendarDate.setMonth(calendarDate.getMonth() + delta);
+      const year = calendarDate.getFullYear();
+      const month = calendarDate.getMonth();
+      const mStr = String(month + 1).padStart(2, '0');
+      const monthPrefix = `${year}-${mStr}`;
+      
+      // Auto-select first day with slots in the new month if current selected date is not in this month
+      if (!selectedCalendarDate.startsWith(monthPrefix)) {
+        const firstSlotOfMonth = localSlots.find(s => s.dateIso.startsWith(monthPrefix));
+        if (firstSlotOfMonth) {
+          selectedCalendarDate = firstSlotOfMonth.dateIso;
+        } else {
+          selectedCalendarDate = `${monthPrefix}-01`;
+        }
+      }
+      renderMonthCalendar();
+    }
+
+    function goToSpecificMonth(year, monthIndex) {
+      calendarDate = new Date(year, monthIndex, 1);
+      const mStr = String(monthIndex + 1).padStart(2, '0');
+      const monthPrefix = `${year}-${mStr}`;
+      const firstSlot = localSlots.find(s => s.dateIso.startsWith(monthPrefix));
+      if (firstSlot) {
+        selectedCalendarDate = firstSlot.dateIso;
+      } else {
+        selectedCalendarDate = `${monthPrefix}-01`;
+      }
       renderMonthCalendar();
     }
 
@@ -1638,7 +1673,45 @@
 
       // Title e.g. "Septembre 2026"
       const monthNames = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+      const shortMonthNames = ["Jan.", "Fév.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
       document.getElementById("monthCalendarTitle").innerText = `${monthNames[month]} ${year}`;
+
+      // Build Month Quick-Pills for all months that have slots
+      const chipsContainer = document.getElementById("monthSelectorChips");
+      if (chipsContainer) {
+        const monthCounts = new Map();
+        localSlots.forEach(s => {
+          if (s.dateIso && s.dateIso.length >= 7) {
+            const key = s.dateIso.substring(0, 7); // "YYYY-MM"
+            monthCounts.set(key, (monthCounts.get(key) || 0) + 1);
+          }
+        });
+
+        // Always include current active calendar month in pills
+        const currentKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+        if (!monthCounts.has(currentKey)) {
+          monthCounts.set(currentKey, 0);
+        }
+
+        const sortedMonths = Array.from(monthCounts.keys()).sort();
+        let chipsHtml = "";
+        sortedMonths.forEach(mKey => {
+          const [yStr, mNumStr] = mKey.split('-');
+          const y = parseInt(yStr, 10);
+          const mIdx = parseInt(mNumStr, 10) - 1;
+          const count = monthCounts.get(mKey);
+          const isActive = (y === year && mIdx === month);
+          
+          chipsHtml += `
+            <button class="filter-pill ${isActive ? 'active' : ''}" style="white-space: nowrap; font-size: 11px; padding: 5px 12px; display: inline-flex; align-items: center; gap: 5px;" onclick="goToSpecificMonth(${y}, ${mIdx})">
+              <span>📅</span>
+              <span>${shortMonthNames[mIdx]} ${y}</span>
+              ${count > 0 ? `<span style="background: ${isActive ? 'rgba(255,255,255,0.25)' : 'var(--primary)'}; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 800;">${count}</span>` : ''}
+            </button>
+          `;
+        });
+        chipsContainer.innerHTML = chipsHtml;
+      }
 
       const grid = document.getElementById("calendarDaysGrid");
       const firstDay = new Date(year, month, 1);
