@@ -278,6 +278,14 @@ class MainActivity : ComponentActivity() {
 
                                     // Action buttons for instructor (Optimized for portrait screens)
                                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        // Force Cloud Sync button
+                                        IconButton(
+                                            onClick = { viewModel.forceSync() },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(Icons.Default.CloudSync, contentDescription = "Synchroniser avec le Web", tint = Color.White, modifier = Modifier.size(19.dp))
+                                        }
+
                                         // Key / License Admin button
                                         IconButton(
                                             onClick = { showLicenseAdminDialog = true },

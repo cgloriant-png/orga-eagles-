@@ -1392,13 +1392,7 @@
           try {
             const msgObj = JSON.parse(lines[i]);
             let rawMsg = msgObj.message || "";
-            if (msgObj.attachment && msgObj.attachment.url && (!rawMsg || rawMsg.includes("You received a file"))) {
-              try {
-                const attRes = await fetch(msgObj.attachment.url);
-                if (attRes.ok) rawMsg = await attRes.text();
-              } catch (e) {}
-            }
-            if (rawMsg) {
+            if (rawMsg && !rawMsg.includes("You received a file")) {
               const decompressed = await decompressMessage(rawMsg);
               if (decompressed && decompressed.startsWith("{") && decompressed.includes('"slots"')) {
                 const snap = JSON.parse(decompressed);

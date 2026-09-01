@@ -125,11 +125,16 @@ class CloudSyncManager(
     }
 
     private fun startSyncLoops() {
-        // 1. Initial immediate sync + periodic background polling (every 3 seconds)
+        // 1. Initial immediate push + sync + periodic background polling
         syncJob?.cancel()
         syncJob = scope.launch(Dispatchers.IO) {
             delay(100)
-            syncFromCloud(forcePushMerged = true)
+            try {
+                pushSnapshotToCloudInternal()
+                syncFromCloud(forcePushMerged = true)
+            } catch (e: Exception) {
+                Log.w(TAG, "Initial sync error: ${e.message}")
+            }
 
             while (isActive) {
                 delay(3500)
@@ -286,7 +291,12 @@ class CloudSyncManager(
         scope.launch(Dispatchers.IO) {
             _syncStatus.value = SyncStatus.SYNCING
             _statusMessage.value = "Synchronisation en cours..."
-            syncFromCloud(forcePushMerged = true)
+            try {
+                pushSnapshotToCloudInternal()
+                syncFromCloud(forcePushMerged = true)
+            } catch (e: Exception) {
+                Log.w(TAG, "forceSyncNow error: ${e.message}")
+            }
         }
     }
 
@@ -325,20 +335,8 @@ class CloudSyncManager(
                         for (line in lines) {
                             try {
                                 val msgObj = JSONObject(line)
-                                var rawMsg = msgObj.optString("message", "")
-                                val attachmentObj = msgObj.optJSONObject("attachment")
-                                val attachmentUrl = attachmentObj?.optString("url", "")
-                                if (!attachmentUrl.isNullOrBlank() && (rawMsg.isBlank() || rawMsg.contains("You received a file"))) {
-                                    try {
-                                        val req = Request.Builder().url(attachmentUrl).get().build()
-                                        httpClient.newCall(req).execute().use { resp ->
-                                            if (resp.isSuccessful) {
-                                                rawMsg = resp.body?.string() ?: ""
-                                            }
-                                        }
-                                    } catch (e: Exception) {}
-                                }
-                                if (rawMsg.isNotBlank()) {
+                                val rawMsg = msgObj.optString("message", "")
+                                if (rawMsg.isNotBlank() && !rawMsg.contains("You received a file")) {
                                     val decompressed = decompressPayload(rawMsg)
                                     if (decompressed.startsWith("{") && decompressed.contains("\"slots\"")) {
                                         val snap = JSONObject(decompressed)
