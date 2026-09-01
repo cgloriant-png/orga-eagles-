@@ -198,12 +198,15 @@ class MainActivity : ComponentActivity() {
                         topBar = {
                             Surface(
                                 color = HighDensityHeaderTitle,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .statusBarsPadding()
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        .height(52.dp)
+                                        .padding(horizontal = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
@@ -355,6 +358,14 @@ class MainActivity : ComponentActivity() {
                                                         viewModel.forceSync()
                                                     },
                                                     leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Nettoyer les doublons de créneaux") },
+                                                    onClick = {
+                                                        showTopOverflow = false
+                                                        viewModel.cleanDuplicateSlots()
+                                                    },
+                                                    leadingIcon = { Icon(Icons.Default.CleaningServices, contentDescription = null) }
                                                 )
                                                 DropdownMenuItem(
                                                     text = { Text("Vider tous les créneaux & élèves", color = MaterialTheme.colorScheme.error) },

@@ -105,6 +105,9 @@ interface PlanningDao {
     @Delete
     suspend fun deleteBooking(booking: BookingEntity)
 
+    @Query("UPDATE bookings SET slotId = :newSlotId WHERE slotId = :oldSlotId")
+    suspend fun reassignBookingsSlot(oldSlotId: Long, newSlotId: Long)
+
     @Query("DELETE FROM bookings WHERE id = :bookingId")
     suspend fun deleteBookingById(bookingId: Long)
 

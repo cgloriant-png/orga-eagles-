@@ -130,6 +130,37 @@ class PlanningRepository(
         cloudSyncManager?.deleteSlot(slotId)
     }
 
+    suspend fun deduplicateSlotsAndSync(): Int {
+        val allSlots = planningDao.getAllSlotsList()
+        val allBookings = planningDao.getAllBookingsList()
+        val bookingsBySlot = allBookings.groupBy { it.slotId }
+
+        // Group slots by unique key: dateIso + startTime + lessonType
+        val grouped = allSlots.groupBy { "${it.dateIso}_${it.startTime}_${it.lessonType.uppercase()}" }
+        var duplicatesRemoved = 0
+
+        for ((_, group) in grouped) {
+            if (group.size > 1) {
+                // Pick the best slot as master (the one with most bookings, or first with non-zero capacity)
+                val master = group.maxByOrNull { (bookingsBySlot[it.id]?.size ?: 0) * 1000 + if (it.isCancelled) 0 else 10 } ?: group.first()
+                for (duplicate in group) {
+                    if (duplicate.id != master.id) {
+                        // Reassign any bookings on duplicate to master slot
+                        planningDao.reassignBookingsSlot(duplicate.id, master.id)
+                        planningDao.deleteSlotById(duplicate.id)
+                        cloudSyncManager?.recordDeletedId("slot", duplicate.id)
+                        duplicatesRemoved++
+                    }
+                }
+            }
+        }
+
+        if (duplicatesRemoved > 0) {
+            cloudSyncManager?.pushFullSync(immediate = true)
+        }
+        return duplicatesRemoved
+    }
+
     // --- Student Actions ---
     suspend fun createStudent(student: StudentEntity): Long {
         val studentWithId = if (student.id <= 0L) student.copy(id = generateUniqueId()) else student

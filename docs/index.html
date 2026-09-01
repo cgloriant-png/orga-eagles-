@@ -1429,7 +1429,27 @@
         aggDeletedBookings.forEach(id => aggBookings.delete(id));
         aggDeletedStudents.forEach(id => aggStudents.delete(id));
 
-        const finalSlots = Array.from(aggSlots.values());
+        // Deduplicate slots by (dateIso + startTime + lessonType)
+        const deduplicatedSlotsMap = new Map();
+        const slotsByKey = new Map();
+        aggSlots.forEach((slot, id) => {
+          const key = `${slot.dateIso}_${slot.startTime}_${(slot.lessonType || '').toUpperCase()}`;
+          const existing = slotsByKey.get(key);
+          if (!existing) {
+            slotsByKey.set(key, slot);
+            deduplicatedSlotsMap.set(id, slot);
+          } else {
+            const hasBksNew = Array.from(aggBookings.values()).some(b => b.slotId === id);
+            const hasBksOld = Array.from(aggBookings.values()).some(b => b.slotId === existing.id);
+            if (hasBksNew && !hasBksOld) {
+              deduplicatedSlotsMap.delete(existing.id);
+              slotsByKey.set(key, slot);
+              deduplicatedSlotsMap.set(id, slot);
+            }
+          }
+        });
+
+        const finalSlots = Array.from(deduplicatedSlotsMap.values());
         const finalStudents = Array.from(aggStudents.values());
         const finalBookings = Array.from(aggBookings.values());
         const finalProgress = Array.from(aggProgress.values());
@@ -1460,11 +1480,17 @@
           }
         }
 
-        if (snapshot.slots && snapshot.slots.length > 0) {
-          localSlots = snapshot.slots;
-          localStorage.setItem("eagles_cache_slots", JSON.stringify(localSlots));
-        } else if (snapshot.slots && localSlots.length === 0) {
-          localSlots = snapshot.slots;
+        if (snapshot.slots) {
+          const slotsByKey = new Map();
+          const deduped = [];
+          snapshot.slots.forEach(s => {
+            const key = `${s.dateIso}_${s.startTime}_${(s.lessonType || '').toUpperCase()}`;
+            if (!slotsByKey.has(key)) {
+              slotsByKey.set(key, s);
+              deduped.push(s);
+            }
+          });
+          localSlots = deduped;
           localStorage.setItem("eagles_cache_slots", JSON.stringify(localSlots));
         }
 

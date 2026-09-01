@@ -408,8 +408,32 @@ class CloudSyncManager(
                         aggregatedDeletedBookings.forEach { aggregatedBookings.remove(it) }
                         aggregatedDeletedStudents.forEach { aggregatedStudents.remove(it) }
 
+                        // Deduplicate slots by (dateIso + startTime + lessonType) to avoid accumulating duplicates across history
+                        val deduplicatedSlots = mutableMapOf<Long, JSONObject>()
+                        val slotsByKey = mutableMapOf<String, JSONObject>()
+                        for ((sId, slotObj) in aggregatedSlots) {
+                            val key = "${slotObj.optString("dateIso")}_${slotObj.optString("startTime")}_${slotObj.optString("lessonType").uppercase()}"
+                            val existing = slotsByKey[key]
+                            if (existing == null) {
+                                slotsByKey[key] = slotObj
+                                deduplicatedSlots[sId] = slotObj
+                            } else {
+                                val exId = existing.optLong("id")
+                                val hasBksNew = aggregatedBookings.values.any { it.optLong("slotId") == sId }
+                                val hasBksOld = aggregatedBookings.values.any { it.optLong("slotId") == exId }
+                                if (hasBksNew && !hasBksOld) {
+                                    deduplicatedSlots.remove(exId)
+                                    slotsByKey[key] = slotObj
+                                    deduplicatedSlots[sId] = slotObj
+                                    aggregatedDeletedSlots.add(exId)
+                                } else {
+                                    aggregatedDeletedSlots.add(sId)
+                                }
+                            }
+                        }
+
                         val mergedObj = JSONObject()
-                        mergedObj.put("slots", JSONArray(aggregatedSlots.values))
+                        mergedObj.put("slots", JSONArray(deduplicatedSlots.values))
                         mergedObj.put("students", JSONArray(aggregatedStudents.values))
                         mergedObj.put("bookings", JSONArray(aggregatedBookings.values))
                         mergedObj.put("progress", JSONArray(aggregatedProgress.values))
