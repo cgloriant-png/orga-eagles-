@@ -1259,9 +1259,10 @@
           const uint8 = new TextEncoder().encode(jsonStr);
           const compressed = window.pako.gzip(uint8);
           let binary = '';
-          const len = compressed.byteLength;
-          for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(compressed[i]);
+          const chunkSize = 8192;
+          for (let i = 0; i < compressed.length; i += chunkSize) {
+            const sub = compressed.subarray(i, i + chunkSize);
+            binary += String.fromCharCode.apply(null, sub);
           }
           return "GZ:" + btoa(binary);
         } catch (e) {
@@ -1286,6 +1287,9 @@
           for (let i = 0; i < binStr.length; i++) {
             bytes[i] = binStr.charCodeAt(i);
           }
+          if (window.pako) {
+            return window.pako.inflate(bytes, { to: 'string' });
+          }
           if (typeof DecompressionStream !== "undefined") {
             const ds = new DecompressionStream("gzip");
             const writer = ds.writable.getWriter();
@@ -1293,8 +1297,6 @@
             writer.close();
             const response = new Response(ds.readable);
             return await response.text();
-          } else if (window.pako) {
-            return window.pako.inflate(bytes, { to: 'string' });
           }
         } catch (e) {
           console.warn("GZ decompression error", e);
@@ -1383,6 +1385,9 @@
         const aggDeletedStudents = new Set();
         let latestRevokedDevices = [];
 
+        let latestSnap = null;
+        let latestTimestamp = 0;
+
         for (let i = 0; i < lines.length; i++) {
           try {
             const msgObj = JSON.parse(lines[i]);
@@ -1397,6 +1402,11 @@
               const decompressed = await decompressMessage(rawMsg);
               if (decompressed && decompressed.startsWith("{") && decompressed.includes('"slots"')) {
                 const snap = JSON.parse(decompressed);
+                const snapTime = snap.lastUpdated || (msgObj.time ? msgObj.time * 1000 : 0);
+                if (snapTime >= latestTimestamp) {
+                  latestTimestamp = snapTime;
+                  latestSnap = snap;
+                }
                 (snap.slots || []).forEach(s => aggSlots.set(s.id, s));
                 (snap.students || []).forEach(st => {
                   const fn = (st.firstName || "").trim();
@@ -1406,9 +1416,6 @@
                 });
                 (snap.bookings || []).forEach(b => aggBookings.set(b.id, b));
                 (snap.progress || []).forEach(p => aggProgress.set(p.studentId, p));
-                (snap.deletedSlotIds || []).forEach(id => aggDeletedSlots.add(id));
-                (snap.deletedBookingIds || []).forEach(id => aggDeletedBookings.add(id));
-                (snap.deletedStudentIds || []).forEach(id => aggDeletedStudents.add(id));
                 if (snap.revokedDevices && Array.isArray(snap.revokedDevices)) {
                   latestRevokedDevices = snap.revokedDevices;
                 }
@@ -1417,17 +1424,29 @@
           } catch (e) {}
         }
 
-        if (aggSlots.size > 0 || aggStudents.size > 0) {
-          const mergedSlots = Array.from(aggSlots.values()).filter(s => !aggDeletedSlots.has(s.id));
-          const mergedStudents = Array.from(aggStudents.values()).filter(st => !aggDeletedStudents.has(st.id));
-          const mergedBookings = Array.from(aggBookings.values()).filter(b => !aggDeletedBookings.has(b.id));
-          const mergedProgress = Array.from(aggProgress.values()).filter(p => !aggDeletedStudents.has(p.studentId));
+        if (latestSnap && latestSnap.slots) {
+          // Merge any students and bookings across recent history so registrations are never lost
+          const combinedStudentsMap = new Map();
+          (latestSnap.students || []).forEach(st => combinedStudentsMap.set(st.id, st));
+          aggStudents.forEach((st, id) => { if (!combinedStudentsMap.has(id)) combinedStudentsMap.set(id, st); });
+
+          const combinedBookingsMap = new Map();
+          (latestSnap.bookings || []).forEach(b => combinedBookingsMap.set(b.id, b));
+          aggBookings.forEach((b, id) => { if (!combinedBookingsMap.has(id)) combinedBookingsMap.set(id, b); });
 
           handleIncomingSnapshot({
-            slots: mergedSlots,
-            students: mergedStudents,
-            bookings: mergedBookings,
-            progress: mergedProgress,
+            slots: latestSnap.slots,
+            students: Array.from(combinedStudentsMap.values()),
+            bookings: Array.from(combinedBookingsMap.values()),
+            progress: latestSnap.progress || Array.from(aggProgress.values()),
+            revokedDevices: latestRevokedDevices.length > 0 ? latestRevokedDevices : (latestSnap.revokedDevices || [])
+          });
+        } else if (aggSlots.size > 0 || aggStudents.size > 0) {
+          handleIncomingSnapshot({
+            slots: Array.from(aggSlots.values()),
+            students: Array.from(aggStudents.values()),
+            bookings: Array.from(aggBookings.values()),
+            progress: Array.from(aggProgress.values()),
             revokedDevices: latestRevokedDevices
           });
         }

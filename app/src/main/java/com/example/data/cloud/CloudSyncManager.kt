@@ -173,29 +173,28 @@ class CloudSyncManager(
 
     private fun compressPayload(jsonStr: String): String {
         return try {
-            if (jsonStr.length < 60000) {
-                jsonStr // Plain JSON is best for instant browser & mobile interoperability
-            } else {
-                val bos = ByteArrayOutputStream()
-                GZIPOutputStream(bos).use { it.write(jsonStr.toByteArray(Charsets.UTF_8)) }
-                "GZ:" + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)
-            }
+            val bos = ByteArrayOutputStream()
+            GZIPOutputStream(bos).use { it.write(jsonStr.toByteArray(Charsets.UTF_8)) }
+            "GZ:" + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)
         } catch (e: Exception) {
+            Log.e(TAG, "compressPayload error: ${e.message}")
             jsonStr
         }
     }
 
     private fun decompressPayload(payload: String): String {
         return try {
-            if (payload.startsWith("GZ:")) {
-                val base64Data = payload.removePrefix("GZ:")
+            val trimmed = payload.trim()
+            if (trimmed.startsWith("GZ:")) {
+                val base64Data = trimmed.removePrefix("GZ:")
                 val bytes = Base64.decode(base64Data, Base64.DEFAULT)
                 val bis = ByteArrayInputStream(bytes)
                 GZIPInputStream(bis).bufferedReader(Charsets.UTF_8).use { it.readText() }
             } else {
-                payload
+                trimmed
             }
         } catch (e: Exception) {
+            Log.w(TAG, "decompressPayload error: ${e.message}")
             payload
         }
     }
@@ -320,6 +319,9 @@ class CloudSyncManager(
                         val aggregatedDeletedBookings = mutableSetOf<Long>()
                         val aggregatedDeletedStudents = mutableSetOf<Long>()
 
+                        var latestSnapshotObj: JSONObject? = null
+                        var latestTimestamp: Long = 0L
+
                         for (line in lines) {
                             try {
                                 val msgObj = JSONObject(line)
@@ -340,6 +342,12 @@ class CloudSyncManager(
                                     val decompressed = decompressPayload(rawMsg)
                                     if (decompressed.startsWith("{") && decompressed.contains("\"slots\"")) {
                                         val snap = JSONObject(decompressed)
+                                        val snapTime = snap.optLong("lastUpdated", msgObj.optLong("time", 0L) * 1000L)
+                                        if (snapTime >= latestTimestamp) {
+                                            latestTimestamp = snapTime
+                                            latestSnapshotObj = snap
+                                        }
+
                                         val slotsArr = snap.optJSONArray("slots") ?: JSONArray()
                                         for (i in 0 until slotsArr.length()) {
                                             val s = slotsArr.getJSONObject(i)
@@ -350,7 +358,6 @@ class CloudSyncManager(
                                             val st = studsArr.getJSONObject(i)
                                             val fn = st.optString("firstName", "").trim()
                                             val ln = st.optString("lastName", "").trim()
-                                            // Purge sample dummy students
                                             val isDummy = (fn in listOf("Jean", "Sophie", "Lucas", "Thomas", "Marie") && ln in listOf("Dupont", "Martin", "Bernard", "Petit", "Leroy"))
                                             if (!isDummy) {
                                                 aggregatedStudents[st.optLong("id")] = st
@@ -366,18 +373,37 @@ class CloudSyncManager(
                                             val p = prgArr.getJSONObject(i)
                                             aggregatedProgress[p.optLong("studentId")] = p
                                         }
-                                        val delS = snap.optJSONArray("deletedSlotIds") ?: JSONArray()
-                                        for (i in 0 until delS.length()) aggregatedDeletedSlots.add(delS.getLong(i))
-                                        val delB = snap.optJSONArray("deletedBookingIds") ?: JSONArray()
-                                        for (i in 0 until delB.length()) aggregatedDeletedBookings.add(delB.getLong(i))
-                                        val delSt = snap.optJSONArray("deletedStudentIds") ?: JSONArray()
-                                        for (i in 0 until delSt.length()) aggregatedDeletedStudents.add(delSt.getLong(i))
                                     }
                                 }
                             } catch (ignored: Exception) {}
                         }
 
-                        if (aggregatedSlots.isNotEmpty() || aggregatedStudents.isNotEmpty()) {
+                        if (latestSnapshotObj != null) {
+                            // Merge active students and bookings from history with the latest snapshot
+                            val mergedObj = JSONObject(latestSnapshotObj.toString())
+                            
+                            val snapStuds = mergedObj.optJSONArray("students") ?: JSONArray()
+                            val existingStudIds = mutableSetOf<Long>()
+                            for (i in 0 until snapStuds.length()) {
+                                existingStudIds.add(snapStuds.getJSONObject(i).optLong("id"))
+                            }
+                            for ((id, st) in aggregatedStudents) {
+                                if (id !in existingStudIds) snapStuds.put(st)
+                            }
+                            mergedObj.put("students", snapStuds)
+
+                            val snapBks = mergedObj.optJSONArray("bookings") ?: JSONArray()
+                            val existingBkIds = mutableSetOf<Long>()
+                            for (i in 0 until snapBks.length()) {
+                                existingBkIds.add(snapBks.getJSONObject(i).optLong("id"))
+                            }
+                            for ((id, b) in aggregatedBookings) {
+                                if (id !in existingBkIds) snapBks.put(b)
+                            }
+                            mergedObj.put("bookings", snapBks)
+
+                            remoteSnapshot = mergedObj
+                        } else if (aggregatedSlots.isNotEmpty() || aggregatedStudents.isNotEmpty()) {
                             val mergedObj = JSONObject()
                             mergedObj.put("slots", JSONArray(aggregatedSlots.values))
                             mergedObj.put("students", JSONArray(aggregatedStudents.values))
