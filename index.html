@@ -1378,33 +1378,58 @@
         const text = await res.text();
         const lines = text.trim().split("\n").filter(l => l.trim().length > 0);
         
-        const parsedSnapshots = [];
-
-        for (let i = 0; i < lines.length; i++) {
+        // Scan backwards from newest to oldest for instant update
+        for (let i = lines.length - 1; i >= 0; i--) {
           try {
             const msgObj = JSON.parse(lines[i]);
             let rawMsg = msgObj.message || "";
-            if (rawMsg && !rawMsg.includes("You received a file")) {
+            if (msgObj.attachment && msgObj.attachment.url && (!rawMsg || rawMsg.includes("You received a file"))) {
+              try {
+                const attRes = await fetch(msgObj.attachment.url);
+                if (attRes.ok) rawMsg = await attRes.text();
+              } catch (e) {}
+            }
+            if (rawMsg) {
               const decompressed = await decompressMessage(rawMsg);
               if (decompressed && decompressed.startsWith("{") && (decompressed.includes('"slots"') || decompressed.includes('"bookings"'))) {
                 const snap = JSON.parse(decompressed);
-                const snapTime = snap.lastUpdated || (msgObj.time ? msgObj.time * 1000 : 0);
-                parsedSnapshots.push({ snapTime, snap });
+                handleIncomingSnapshot(snap);
+                updateSyncStatus("online", "En direct");
+                return;
               }
             }
           } catch (e) {}
         }
-
-        // Find the newest snapshot
-        parsedSnapshots.sort((a, b) => b.snapTime - a.snapTime);
-        const latest = parsedSnapshots.length > 0 ? parsedSnapshots[0].snap : null;
-
-        if (latest) {
-          handleIncomingSnapshot(latest);
-        }
         updateSyncStatus("online", "En direct");
       } catch (err) {
         console.warn("Poll error", err);
+      }
+    }
+
+    function autoFocusMonthWithSlots() {
+      if (!localSlots || localSlots.length === 0) return;
+      const curY = calendarDate.getFullYear();
+      const curM = calendarDate.getMonth();
+      const curPrefix = `${curY}-${String(curM + 1).padStart(2, '0')}`;
+      const hasSlotsInCurMonth = localSlots.some(s => s.dateIso && s.dateIso.startsWith(curPrefix));
+
+      if (!hasSlotsInCurMonth) {
+        const todayIso = new Date().toISOString().split('T')[0];
+        const upcomingSlot = localSlots.filter(s => s.dateIso >= todayIso).sort((a, b) => a.dateIso.localeCompare(b.dateIso))[0]
+                          || localSlots.slice().sort((a, b) => b.dateIso.localeCompare(a.dateIso))[0];
+        if (upcomingSlot && upcomingSlot.dateIso) {
+          const parts = upcomingSlot.dateIso.split('-');
+          calendarDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+          selectedCalendarDate = upcomingSlot.dateIso;
+        }
+      } else {
+        const selectedHasSlots = localSlots.some(s => s.dateIso === selectedCalendarDate);
+        if (!selectedHasSlots) {
+          const firstSlotInMonth = localSlots.filter(s => s.dateIso.startsWith(curPrefix)).sort((a, b) => a.dateIso.localeCompare(b.dateIso))[0];
+          if (firstSlotInMonth) {
+            selectedCalendarDate = firstSlotInMonth.dateIso;
+          }
+        }
       }
     }
 
@@ -1439,6 +1464,7 @@
           });
           localSlots = deduped;
           localStorage.setItem("eagles_cache_slots", JSON.stringify(localSlots));
+          autoFocusMonthWithSlots();
         }
 
         if (snapshot.students && Array.isArray(snapshot.students)) {
@@ -2190,6 +2216,7 @@
         localProgress = JSON.parse(localStorage.getItem("eagles_cache_progress") || "[]");
       } catch (e) {}
 
+      autoFocusMonthWithSlots();
       await initDeviceId();
       await checkActivation();
       renderProfile();
