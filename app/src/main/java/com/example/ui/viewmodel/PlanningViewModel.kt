@@ -129,19 +129,22 @@ class PlanningViewModel(application: Application) : AndroidViewModel(application
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         viewModelScope.launch {
-            repository.loadInitialRealDataIfEmpty(application)
+            repository.restoreMissingStandardSlots(application)
             repository.purgeDummyStudents()
+            repository.deduplicateStudentsAndSync()
             repository.deduplicateSlotsAndSync()
         }
     }
 
     fun cleanDuplicateSlots() {
         viewModelScope.launch {
-            val count = repository.deduplicateSlotsAndSync()
-            if (count > 0) {
-                _feedbackMessage.emit("✅ $count doublons supprimés avec succès !")
+            val countSlots = repository.deduplicateSlotsAndSync()
+            val countStudents = repository.deduplicateStudentsAndSync()
+            val total = countSlots + countStudents
+            if (total > 0) {
+                _feedbackMessage.emit("✅ $countSlots créneau(x) et $countStudents élève(s) en doublon nettoyés !")
             } else {
-                _feedbackMessage.emit("Aucun doublon détecté, planning propre !")
+                _feedbackMessage.emit("Aucun doublon détecté, planning et élèves propres !")
             }
         }
     }

@@ -1379,10 +1379,6 @@
         const lines = text.trim().split("\n").filter(l => l.trim().length > 0);
         
         const parsedSnapshots = [];
-        const aggStudents = new Map();
-        const aggBookings = new Map();
-        const aggProgress = new Map();
-        let latestRevokedDevices = [];
 
         for (let i = 0; i < lines.length; i++) {
           try {
@@ -1394,56 +1390,18 @@
                 const snap = JSON.parse(decompressed);
                 const snapTime = snap.lastUpdated || (msgObj.time ? msgObj.time * 1000 : 0);
                 parsedSnapshots.push({ snapTime, snap });
-
-                (snap.students || []).forEach(st => {
-                  const fn = (st.firstName || "").trim();
-                  const ln = (st.lastName || "").trim();
-                  const isDummy = (["Jean", "Sophie", "Lucas", "Thomas", "Marie"].includes(fn) && ["Dupont", "Martin", "Bernard", "Petit", "Leroy"].includes(ln));
-                  if (!isDummy && st.id) aggStudents.set(st.id, st);
-                });
-                (snap.bookings || []).forEach(b => {
-                  if (b.id) aggBookings.set(b.id, b);
-                });
-                (snap.progress || []).forEach(p => {
-                  if (p.studentId) aggProgress.set(p.studentId, p);
-                });
-                if (snap.revokedDevices && Array.isArray(snap.revokedDevices)) {
-                  latestRevokedDevices = snap.revokedDevices;
-                }
               }
             }
           } catch (e) {}
         }
 
-        // Find the newest snapshot that contains active slots
+        // Find the newest snapshot
         parsedSnapshots.sort((a, b) => b.snapTime - a.snapTime);
-        const latestWithSlots = parsedSnapshots.find(item => item.snap.slots && item.snap.slots.length > 0);
+        const latest = parsedSnapshots.length > 0 ? parsedSnapshots[0].snap : null;
 
-        let finalSlots = [];
-        if (latestWithSlots && latestWithSlots.snap.slots) {
-          const slotsByKey = new Map();
-          latestWithSlots.snap.slots.forEach(slot => {
-            const key = `${slot.dateIso}_${slot.startTime}_${(slot.lessonType || '').toUpperCase()}`;
-            if (!slotsByKey.has(key)) {
-              slotsByKey.set(key, slot);
-              finalSlots.push(slot);
-            }
-          });
-        } else if (localSlots.length > 0) {
-          finalSlots = localSlots;
+        if (latest) {
+          handleIncomingSnapshot(latest);
         }
-
-        const finalStudents = Array.from(aggStudents.values());
-        const finalBookings = Array.from(aggBookings.values());
-        const finalProgress = Array.from(aggProgress.values());
-
-        handleIncomingSnapshot({
-          slots: finalSlots,
-          students: finalStudents,
-          bookings: finalBookings,
-          progress: finalProgress,
-          revokedDevices: latestRevokedDevices
-        });
         updateSyncStatus("online", "En direct");
       } catch (err) {
         console.warn("Poll error", err);
@@ -1463,30 +1421,45 @@
           }
         }
 
-        if (snapshot.slots) {
+        const delSlots = new Set(snapshot.deletedSlotIds || []);
+        const delBookings = new Set(snapshot.deletedBookingIds || []);
+        const delStudents = new Set(snapshot.deletedStudentIds || []);
+
+        if (snapshot.slots && Array.isArray(snapshot.slots)) {
           const slotsByKey = new Map();
           const deduped = [];
           snapshot.slots.forEach(s => {
-            const key = `${s.dateIso}_${s.startTime}_${(s.lessonType || '').toUpperCase()}`;
-            if (!slotsByKey.has(key)) {
-              slotsByKey.set(key, s);
-              deduped.push(s);
+            if (!delSlots.has(s.id)) {
+              const key = `${s.dateIso}_${s.startTime}_${(s.lessonType || '').toUpperCase()}`;
+              if (!slotsByKey.has(key)) {
+                slotsByKey.set(key, s);
+                deduped.push(s);
+              }
             }
           });
           localSlots = deduped;
           localStorage.setItem("eagles_cache_slots", JSON.stringify(localSlots));
         }
 
-        if (snapshot.students) {
-          localStudents = snapshot.students;
+        if (snapshot.students && Array.isArray(snapshot.students)) {
+          const dummyNames = ["Jean", "Sophie", "Lucas", "Thomas", "Marie"];
+          const dummyLasts = ["Dupont", "Martin", "Bernard", "Petit", "Leroy"];
+          localStudents = snapshot.students.filter(st => {
+            if (delStudents.has(st.id)) return false;
+            const fn = (st.firstName || "").trim();
+            const ln = (st.lastName || "").trim();
+            return !(dummyNames.includes(fn) && dummyLasts.includes(ln));
+          });
           localStorage.setItem("eagles_cache_students", JSON.stringify(localStudents));
         }
-        if (snapshot.bookings) {
-          localBookings = snapshot.bookings;
+
+        if (snapshot.bookings && Array.isArray(snapshot.bookings)) {
+          localBookings = snapshot.bookings.filter(b => !delBookings.has(b.id));
           localStorage.setItem("eagles_cache_bookings", JSON.stringify(localBookings));
         }
-        if (snapshot.progress) {
-          localProgress = snapshot.progress;
+
+        if (snapshot.progress && Array.isArray(snapshot.progress)) {
+          localProgress = snapshot.progress.filter(p => !delStudents.has(p.studentId));
           localStorage.setItem("eagles_cache_progress", JSON.stringify(localProgress));
         }
 
@@ -1511,7 +1484,7 @@
           schoolCode: schoolCode,
           senderId: myDeviceId,
           lastUpdated: Date.now(),
-          slots: localSlots.length > 0 ? localSlots : undefined,
+          slots: localSlots,
           students: localStudents,
           bookings: localBookings,
           progress: localProgress,
@@ -1549,7 +1522,18 @@
       }
 
       const cleanPhone = p.phone.replace(/[^0-9]/g, '');
-      let st = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
+      const reqFirst = p.firstName.trim().toLowerCase();
+      const reqLast = p.lastName.trim().toLowerCase();
+
+      let st = localStudents.find(s => {
+        const sPhone = (s.phone || '').replace(/[^0-9]/g, '');
+        if (cleanPhone.length >= 8 && sPhone.length >= 8 && sPhone === cleanPhone) return true;
+        const sFirst = (s.firstName || '').trim().toLowerCase();
+        const sLast = (s.lastName || '').trim().toLowerCase();
+        if (reqFirst.length > 0 && reqLast.length > 0 && sFirst === reqFirst && sLast === reqLast) return true;
+        return false;
+      });
+
       if (!st) {
         st = {
           id: Date.now() + Math.floor(Math.random() * 1000),
@@ -1563,6 +1547,12 @@
           createdAt: Date.now()
         };
         localStudents.push(st);
+      } else {
+        // Update contact details if modified
+        st.firstName = p.firstName;
+        st.lastName = p.lastName;
+        st.phone = p.phone;
+        st.level = p.level;
       }
 
       const existing = localBookings.find(b => b.slotId === slotId && b.studentId === st.id);
@@ -1602,7 +1592,17 @@
     function handleUnenroll(slotId) {
       const p = getProfile();
       const cleanPhone = p.phone.replace(/[^0-9]/g, '');
-      const st = localStudents.find(s => s.phone && s.phone.replace(/[^0-9]/g, '') === cleanPhone);
+      const reqFirst = p.firstName.trim().toLowerCase();
+      const reqLast = p.lastName.trim().toLowerCase();
+
+      const st = localStudents.find(s => {
+        const sPhone = (s.phone || '').replace(/[^0-9]/g, '');
+        if (cleanPhone.length >= 8 && sPhone.length >= 8 && sPhone === cleanPhone) return true;
+        const sFirst = (s.firstName || '').trim().toLowerCase();
+        const sLast = (s.lastName || '').trim().toLowerCase();
+        if (reqFirst.length > 0 && reqLast.length > 0 && sFirst === reqFirst && sLast === reqLast) return true;
+        return false;
+      });
       if (!st) return;
 
       if (confirm("Voulez-vous vraiment annuler votre inscription à ce créneau ?")) {

@@ -163,6 +163,116 @@ class PlanningRepository(
         return duplicatesRemoved
     }
 
+    suspend fun deduplicateStudentsAndSync(): Int {
+        val allStudents = planningDao.getAllStudentsList()
+        val allBookings = planningDao.getAllBookingsList()
+        val allProgress = planningDao.getAllStudentProgressList()
+        val bookingsByStudent = allBookings.groupBy { it.studentId }
+        val progressByStudent = allProgress.associateBy { it.studentId }
+
+        // Group by normalized (first_name + last_name) or normalized phone
+        val grouped = allStudents.groupBy {
+            val normFirst = it.firstName.trim().lowercase()
+            val normLast = it.lastName.trim().lowercase()
+            val normP = normalizePhoneNumber(it.phone)
+            if (normP.isNotBlank() && normP.length >= 8) {
+                "P:$normP"
+            } else if (normFirst.isNotBlank() || normLast.isNotBlank()) {
+                "N:${normFirst}_${normLast}"
+            } else {
+                "ID:${it.id}"
+            }
+        }
+
+        var duplicatesRemoved = 0
+        for ((_, group) in grouped) {
+            if (group.size > 1) {
+                // Master student is the one with most bookings, or valid phone, or valid email
+                val master = group.maxByOrNull { st ->
+                    (bookingsByStudent[st.id]?.size ?: 0) * 100 +
+                    (if (st.phone.isNotBlank()) 10 else 0) +
+                    (if (st.email.isNotBlank()) 5 else 0) +
+                    (if (progressByStudent.containsKey(st.id)) 20 else 0)
+                } ?: group.first()
+
+                for (duplicate in group) {
+                    if (duplicate.id != master.id) {
+                        // Reassign bookings from duplicate to master
+                        val dupBookings = bookingsByStudent[duplicate.id] ?: emptyList()
+                        for (b in dupBookings) {
+                            planningDao.deleteBookingById(b.id)
+                            val existingMasterBooking = planningDao.getBookingsForSlotSync(b.slotId).find { it.studentId == master.id }
+                            if (existingMasterBooking == null) {
+                                planningDao.insertBooking(b.copy(id = generateUniqueId(), studentId = master.id))
+                            }
+                        }
+                        // Reassign progress
+                        val dupProgress = progressByStudent[duplicate.id]
+                        if (dupProgress != null && !progressByStudent.containsKey(master.id)) {
+                            planningDao.insertOrUpdateProgress(dupProgress.copy(studentId = master.id))
+                        }
+                        planningDao.deleteStudent(duplicate)
+                        cloudSyncManager?.recordDeletedId("student", duplicate.id)
+                        duplicatesRemoved++
+                    }
+                }
+            }
+        }
+        if (duplicatesRemoved > 0) {
+            cloudSyncManager?.pushFullSync(immediate = true)
+        }
+        return duplicatesRemoved
+    }
+
+    suspend fun restoreMissingStandardSlots(context: android.content.Context): Int {
+        var addedCount = 0
+        try {
+            val jsonString = context.assets.open("initial_real_data.json").bufferedReader().use { it.readText() }
+            val root = org.json.JSONObject(jsonString)
+            val slots = root.optJSONArray("slots") ?: org.json.JSONArray()
+
+            val currentSlots = planningDao.getAllSlotsList()
+            val currentKeys = currentSlots.map { "${it.dateIso}_${it.startTime}_${it.lessonType.uppercase()}" }.toSet()
+
+            val slotsToInsert = mutableListOf<LessonSlotEntity>()
+            for (i in 0 until slots.length()) {
+                val s = slots.getJSONObject(i)
+                val dateIso = s.optString("dateIso")
+                val startTime = s.optString("startTime")
+                val lessonType = s.optString("lessonType", "GONFLAGE")
+                val key = "${dateIso}_${startTime}_${lessonType.uppercase()}"
+                if (key !in currentKeys) {
+                    slotsToInsert.add(
+                        LessonSlotEntity(
+                            id = generateUniqueId(),
+                            dateIso = dateIso,
+                            startTime = startTime,
+                            endTime = s.optString("endTime"),
+                            title = s.optString("title"),
+                            lessonType = lessonType,
+                            location = s.optString("location", "Plouharnel (56)"),
+                            maxCapacity = s.optInt("maxCapacity", 4),
+                            notes = s.optString("notes"),
+                            isCancelled = s.optBoolean("isCancelled", false),
+                            weatherAlert = s.optString("weatherAlert", ""),
+                            cancelReason = s.optString("cancelReason", ""),
+                            postponedTo = s.optString("postponedTo", ""),
+                            createdAt = System.currentTimeMillis()
+                        )
+                    )
+                    addedCount++
+                }
+            }
+            if (slotsToInsert.isNotEmpty()) {
+                planningDao.insertSlots(slotsToInsert)
+                cloudSyncManager?.pushFullSync(immediate = true)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PlanningRepository", "Error restoring missing slots: ${e.message}", e)
+        }
+        return addedCount
+    }
+
     // --- Student Actions ---
     suspend fun createStudent(student: StudentEntity): Long {
         val studentWithId = if (student.id <= 0L) student.copy(id = generateUniqueId()) else student
